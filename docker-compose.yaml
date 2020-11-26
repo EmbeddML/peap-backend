@@ -1,0 +1,7 @@
+version: '3.4'
+
+services:
+  api:
+    build: .
+    image: politicians_analysis-backend
+      - 80:80

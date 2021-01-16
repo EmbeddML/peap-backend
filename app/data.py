@@ -1,7 +1,8 @@
 import pandas as pd
+import pickle as pkl
 from settings import DATA_DIRECTORY
 from os.path import join
-from typing import List
+from typing import List, Dict
 from models import Coalition, Party, User
 from random import randint
 
@@ -64,3 +65,10 @@ def load_users() -> List[User]:
     users = df.apply(user_from_row, axis=1).tolist()
 
     return users
+
+
+def load_topics_distributions() -> Dict[str, Dict[str, List]]:
+    with open(join(DATA_DIRECTORY, 'topics_distributions.pkl.gz'), 'rb') as f:
+        topics_dist = pkl.load(f)
+
+    return topics_dist

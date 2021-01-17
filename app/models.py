@@ -4,25 +4,6 @@ from typing import Optional
 from pydantic import BaseModel
 
 
-@dataclass
-class TwitterPoint2d:
-    twitter_name: str
-    x: float
-    y: float
-
-
-@dataclass
-class TwitterPoint3d(TwitterPoint2d):
-    z: float
-
-
-@dataclass
-class TwitterUser:
-    twitter_name: str
-    party: Optional[str]
-    coalition: Optional[str]
-
-
 class User(BaseModel):
     username: str
     party: str
@@ -49,3 +30,13 @@ class Party(BaseModel):
 class Coalition(BaseModel):
     coalition_id: int
     name: str
+
+
+class Tweet(BaseModel):
+    tweet_id: int
+    twitter_link: str
+    username: str
+    tweet_text: str
+    topic: int
+    topic_proba: float
+    sentiment: str

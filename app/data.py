@@ -2,7 +2,7 @@ import pandas as pd
 import pickle as pkl
 from settings import DATA_DIRECTORY
 from os.path import join
-from typing import List, Dict
+from typing import List, Dict, Union
 from models import Coalition, Party, User
 from random import randint
 
@@ -72,3 +72,30 @@ def load_topics_distributions() -> Dict[str, Dict[str, List]]:
         topics_dist = pkl.load(f)
 
     return topics_dist
+
+
+def load_sentiment_distributions() -> Dict[str, Dict[Union[str, int], List]]:
+    with open(join(DATA_DIRECTORY, 'sentiment_distributions.pkl.gz'), 'rb') as f:
+        sentiment_dist = pkl.load(f)
+
+    return sentiment_dist
+
+
+def load_words_per_topic() -> Dict[int, List]:
+    with open(join(DATA_DIRECTORY, 'words_per_topic.pkl.gz'), 'rb') as f:
+        words_per_topic = pkl.load(f)
+
+    return words_per_topic
+
+
+def load_words_counts() -> Dict[str, Dict[str, List]]:
+    with open(join(DATA_DIRECTORY, 'words_counts.pkl.gz'), 'rb') as f:
+        words_counts = pkl.load(f)
+
+    return words_counts
+
+
+def load_tweets() -> pd.DataFrame:
+    tweets = pd.read_pickle(join(DATA_DIRECTORY, 'tweets.pkl.gz'))
+
+    return tweets

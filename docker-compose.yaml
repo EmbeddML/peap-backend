@@ -2,6 +2,6 @@ version: '3.4'
 
 services:
   api:
-    build: .
-    image: politicians_analysis-backend
-      - 80:80
+    image: piotrgramacki/sma-backend:0.1
+    ports:
+    - 80:80

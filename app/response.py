@@ -1,3 +1,6 @@
+'''Classes used for API documentation purposes. Values are examples'''
+
+
 from pydantic.main import BaseModel
 
 

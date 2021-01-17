@@ -1,4 +1,4 @@
-'''Classes used for API documentation purposes. Values are examples'''
+"""Classes used for API documentation purposes. Values are examples"""
 
 
 from pydantic.main import BaseModel
@@ -12,3 +12,7 @@ class TopicDistribution(BaseModel):
 class WordsCounts(BaseModel):
     text: str = 'word'
     value: float = 42
+
+
+class ProfileImage(BaseModel):
+    url: str = 'url_to_pic'

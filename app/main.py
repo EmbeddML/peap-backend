@@ -8,7 +8,8 @@ from data import load_users, load_parties, load_coalitions, \
     load_topics_distributions, load_sentiment_distributions, \
     load_words_per_topic, load_words_counts, load_tweets
 from models import *
-from response import TopicDistribution, WordsCounts
+from response import TopicDistribution, WordsCounts, ProfileImage
+from twitter import get_twitter_api_instance, get_profile_photo
 
 app = FastAPI()
 
@@ -24,6 +25,7 @@ words_per_topic = load_words_per_topic()
 words_counts = load_words_counts()
 
 tweets = load_tweets()
+twitterAPI = get_twitter_api_instance()
 
 
 def get_tweets_by_column(
@@ -138,6 +140,21 @@ async def get_tweets_by_username(
         )
         return user_tweets.apply(tweets_from_rows, axis=1).tolist() if len(
             user_tweets) > 0 else []
+
+
+@app.get("/user/{username}/photo", response_model=ProfileImage)
+async def get_user_photo(username: str):
+    user = next((user for user in users if user.username == username), None)
+
+    if user is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail='User not found'
+        )
+    else:
+        url = get_profile_photo(twitterAPI, username)
+
+        return {"url": url}
 
 
 @app.get("/party", response_model=List[Party])

@@ -8,7 +8,7 @@ from data import load_users, load_parties, load_coalitions, \
     load_topics_distributions, load_sentiment_distributions, \
     load_words_per_topic, load_words_counts, load_tweets
 from models import *
-from response import TopicDistribution
+from response import TopicDistribution, WordsCounts
 
 app = FastAPI()
 
@@ -102,7 +102,7 @@ async def get_sentiment_by_username(username: str):
         return sentiment_per_user[username]
 
 
-@app.get("/user/{username}/word")
+@app.get("/user/{username}/word", response_model=List[WordsCounts])
 async def get_words_by_username(username: str):
     words_per_user = words_counts['per_user']
 
@@ -114,7 +114,7 @@ async def get_words_by_username(username: str):
         return words_per_user[username]
 
 
-@app.get("/user/{username}/tweets")
+@app.get("/user/{username}/tweets", response_model=List[Tweet])
 async def get_tweets_by_username(
         username: str,
         limit: int = 5,
@@ -188,7 +188,7 @@ async def get_sentiment_by_party(party_id: int):
         return sentiment_per_party[party.name]
 
 
-@app.get("/party/{party_id}/word")
+@app.get("/party/{party_id}/word", response_model=List[WordsCounts])
 async def get_words_by_party(party_id: int):
     words_per_party = words_counts['per_party']
 
@@ -203,7 +203,7 @@ async def get_words_by_party(party_id: int):
         return words_per_party[party.name]
 
 
-@app.get("/party/{party_id}/tweets")
+@app.get("/party/{party_id}/tweets", response_model=List[Tweet])
 async def get_tweets_by_party(
         party_id: int,
         limit: int = 5,
@@ -279,8 +279,8 @@ async def get_sentiment_by_coalition(coalition_id: int):
         return sentiment_per_coalition[coalition.name]
 
 
-@app.get("/coalition/{coalition_id}/word")
-async def get_sentiment_by_coalition(coalition_id: int):
+@app.get("/coalition/{coalition_id}/word", response_model=List[WordsCounts])
+async def get_words_by_coalition(coalition_id: int):
     words_per_coalition = words_counts['per_coalition']
 
     coalition = next((coalition for coalition in coalitions if
@@ -294,7 +294,7 @@ async def get_sentiment_by_coalition(coalition_id: int):
         return words_per_coalition[coalition.name]
 
 
-@app.get("/coalition/{coalition_id}/tweets")
+@app.get("/coalition/{coalition_id}/tweets", response_model=List[Tweet])
 async def get_tweets_by_coalition(
         coalition_id: int,
         limit: int = 5,
@@ -333,7 +333,7 @@ async def get_sentiment_by_topic(topic_id: int):
         return sentiment_per_topic[topic_id]
 
 
-@app.get("/topic/{topic_id}/word")
+@app.get("/topic/{topic_id}/word", response_model=List[WordsCounts])
 async def get_words_by_topic(topic_id: int):
     if topic_id not in words_per_topic.keys():
         raise HTTPException(

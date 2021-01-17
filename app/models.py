@@ -1,21 +1,42 @@
 from dataclasses import dataclass
 from typing import Optional
 
-
-@dataclass
-class TwitterPoint2d:
-    twitter_name: str
-    x: float
-    y: float
+from pydantic import BaseModel
 
 
-@dataclass
-class TwitterPoint3d(TwitterPoint2d):
-    z: float
+class User(BaseModel):
+    username: str
+    party: str
+    coalition: str
+    role: str
+    name: str
+    tweets_count: int
+    x_graph2d: float
+    y_graph2d: float
+    x_graph3d: float
+    y_graph3d: float
+    z_graph3d: float
+    cluster_dbscan_id: int
+    cluster_kmeans_id: int
+    cluster_pam_id: int
 
 
-@dataclass
-class TwitterUser:
-    twitter_name: str
-    party: Optional[str]
-    coalition: Optional[str]
+class Party(BaseModel):
+    party_id: int
+    name: str
+    coalition: str
+
+
+class Coalition(BaseModel):
+    coalition_id: int
+    name: str
+
+
+class Tweet(BaseModel):
+    tweet_id: int
+    twitter_link: str
+    username: str
+    tweet_text: str
+    topic: int
+    topic_proba: float
+    sentiment: str

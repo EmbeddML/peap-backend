@@ -6,7 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from data import load_users, load_parties, load_coalitions, \
     load_topics_distributions, load_sentiment_distributions, \
-    load_words_per_topic, load_words_counts, load_tweets
+    load_words_per_topic, load_words_counts, get_db_engine
 from models import *
 from response import TopicDistribution, WordsCounts, ProfileImage
 from twitter import get_twitter_api_instance, get_profile_photo
@@ -24,8 +24,9 @@ sentiment_dist = load_sentiment_distributions()
 words_per_topic = load_words_per_topic()
 words_counts = load_words_counts()
 
-tweets = load_tweets()
 twitterAPI = get_twitter_api_instance()
+
+db_engine = get_db_engine()
 
 
 def get_tweets_by_column(
@@ -35,7 +36,10 @@ def get_tweets_by_column(
         sentiment: Optional[str] = None,
         topic: Optional[int] = None
 ):
-    selected = tweets[tweets[column_name] == column_value]
+    selected = pd.read_sql(
+        f"SELECT * FROM tweets WHERE {column_name} = \"{column_value}\"",
+        db_engine
+    )
 
     if sentiment is not None:
         selected = selected[selected['sentiment'] == sentiment]

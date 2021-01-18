@@ -6,3 +6,4 @@ venv
 .idea
 /.python-version
 *.ipynb
+*.sqlite

@@ -1,5 +1,8 @@
 import pandas as pd
 import pickle as pkl
+
+from sqlalchemy import create_engine
+
 from settings import DATA_DIRECTORY
 from os.path import join
 from typing import List, Dict, Union
@@ -95,7 +98,5 @@ def load_words_counts() -> Dict[str, Dict[str, List]]:
     return words_counts
 
 
-def load_tweets() -> pd.DataFrame:
-    tweets = pd.read_pickle(join(DATA_DIRECTORY, 'tweets.pkl.gz'))
-
-    return tweets
+def get_db_engine():
+    return create_engine(f"sqlite:///{join(DATA_DIRECTORY, 'tweets.sqlite')}")

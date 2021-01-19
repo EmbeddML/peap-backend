@@ -109,15 +109,20 @@ async def get_sentiment_by_username(username: str):
 
 
 @app.get("/user/{username}/word", response_model=List[WordsCounts])
-async def get_words_by_username(username: str):
+async def get_words_by_username(username: str, limit: int = 100):
     words_per_user = words_counts['per_user']
 
     if username not in words_per_user.keys():
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail='User not found')
+    elif limit < 1:
+        raise HTTPException(
+            status_code=status.HTTP_406_NOT_ACCEPTABLE,
+            detail='Limit must be positive integer'
+        )
     else:
-        return words_per_user[username]
+        return words_per_user[username][:limit]
 
 
 @app.get("/user/{username}/tweets", response_model=List[Tweet])
@@ -210,7 +215,7 @@ async def get_sentiment_by_party(party_id: int):
 
 
 @app.get("/party/{party_id}/word", response_model=List[WordsCounts])
-async def get_words_by_party(party_id: int):
+async def get_words_by_party(party_id: int, limit: int = 100):
     words_per_party = words_counts['per_party']
 
     party = next((party for party in parties if party.party_id == party_id),
@@ -220,8 +225,13 @@ async def get_words_by_party(party_id: int):
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail='Party not found')
+    elif limit < 1:
+        raise HTTPException(
+            status_code=status.HTTP_406_NOT_ACCEPTABLE,
+            detail='Limit must be positive integer'
+        )
     else:
-        return words_per_party[party.name]
+        return words_per_party[party.name][:limit]
 
 
 @app.get("/party/{party_id}/tweets", response_model=List[Tweet])
@@ -301,7 +311,7 @@ async def get_sentiment_by_coalition(coalition_id: int):
 
 
 @app.get("/coalition/{coalition_id}/word", response_model=List[WordsCounts])
-async def get_words_by_coalition(coalition_id: int):
+async def get_words_by_coalition(coalition_id: int, limit: int = 100):
     words_per_coalition = words_counts['per_coalition']
 
     coalition = next((coalition for coalition in coalitions if
@@ -311,8 +321,13 @@ async def get_words_by_coalition(coalition_id: int):
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail='Party not found')
+    elif limit < 1:
+        raise HTTPException(
+            status_code=status.HTTP_406_NOT_ACCEPTABLE,
+            detail='Limit must be positive integer'
+        )
     else:
-        return words_per_coalition[coalition.name]
+        return words_per_coalition[coalition.name][:limit]
 
 
 @app.get("/coalition/{coalition_id}/tweets", response_model=List[Tweet])
@@ -355,10 +370,15 @@ async def get_sentiment_by_topic(topic_id: int):
 
 
 @app.get("/topic/{topic_id}/word", response_model=List[WordsCounts])
-async def get_words_by_topic(topic_id: int):
+async def get_words_by_topic(topic_id: int, limit: int = 100):
     if topic_id not in words_per_topic.keys():
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail='User not found')
+    elif limit < 1:
+        raise HTTPException(
+            status_code=status.HTTP_406_NOT_ACCEPTABLE,
+            detail='Limit must be positive integer'
+        )
     else:
-        return words_per_topic[topic_id]
+        return words_per_topic[topic_id][:limit]

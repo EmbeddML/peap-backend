@@ -7,8 +7,17 @@ services:
       - --api.insecure=true
       - --providers.docker
       - --providers.file.directory=/etc/traefik/dynamic
-      - --entryPoints.websecure.address=:443
+      - --entryPoints.http.address=:80
+      - --entryPoints.https.address=:443
+    labels:
+      #Redirect HTTP -> HTTPS
+      - "traefik.enable=true"
+      - "traefik.http.routers.https-redirect.entrypoints=http"
+      - "traefik.http.routers.https-redirect.rule=HostRegexp(`{any:.*}`)"
+      - "traefik.http.routers.https-redirect.middlewares=https-redirect"
+      - "traefik.http.middlewares.https-redirect.redirectscheme.scheme=https"
     ports:
+      - 80:80
       - 443:443
       - 30080:8080
     volumes:
@@ -19,13 +28,9 @@ services:
   api:
     image: piotrgramacki/sma-backend:0.3-lite
     labels:
-      # Create a router called whoami listening on the websecure entrypoint
-      - "traefik.http.routers.api.entrypoints=websecure"
-      # Force TLS
+      - "traefik.http.routers.api.entrypoints=https"
       - "traefik.http.routers.api.tls=true"
-      # Apply a host rule specifying the domain the service will respond to
       - "traefik.http.routers.api.rule=Host(`api-politicians.embedd.ml`)"
-      # Send traffic to the container via port 8080
       - "traefik.http.services.api-service.loadbalancer.server.port=80"
     environment:
       - CONSUMER_KEY=***

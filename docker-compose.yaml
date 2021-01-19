@@ -1,7 +1,36 @@
 version: '3.4'
 
 services:
-  api:
-    image: piotrgramacki/sma-backend:0.1
+  reverse-proxy:
+    image: traefik:v2.3
+    command:
+      - --api.insecure=true
+      - --providers.docker
+      - --providers.file.directory=/etc/traefik/dynamic
+      - --entryPoints.websecure.address=:443
     ports:
-    - 80:80
+      - 443:443
+      - 30080:8080
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - /etc/letsencrypt/live/embedd.ml/cert.pem:/secrets/cert.pem
+      - /etc/letsencrypt/live/embedd.ml/privkey.pem:/secrets/key.pem
+      - ./certs-traefik.yaml:/etc/traefik/dynamic/certs-traefik.yaml
+  api:
+    image: piotrgramacki/sma-backend:0.3-lite
+    labels:
+      # Create a router called whoami listening on the websecure entrypoint
+      - "traefik.http.routers.api.entrypoints=websecure"
+      # Force TLS
+      - "traefik.http.routers.api.tls=true"
+      # Apply a host rule specifying the domain the service will respond to
+      - "traefik.http.routers.api.rule=Host(`api-politicians.embedd.ml`)"
+      # Send traffic to the container via port 8080
+      - "traefik.http.services.api-service.loadbalancer.server.port=80"
+    environment:
+      - CONSUMER_KEY=***
+      - CONSUMER_SECRET=***
+      - ACCESS_TOKEN_KEY=***
+      - ACCESS_TOKEN_SECRET=***
+    volumes:
+      - ./tweets.sqlite:/app/data/tweets.sqlite

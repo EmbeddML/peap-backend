@@ -26,7 +26,7 @@ services:
       - /etc/letsencrypt/live/embedd.ml/privkey.pem:/secrets/key.pem
       - ./certs-traefik.yaml:/etc/traefik/dynamic/certs-traefik.yaml
   api:
-    image: piotrgramacki/sma-backend:0.3-lite
+    image: piotrgramacki/sma-backend:0.4
     labels:
       - "traefik.http.routers.api.entrypoints=https"
       - "traefik.http.routers.api.tls=true"
@@ -38,4 +38,4 @@ services:
       - ACCESS_TOKEN_KEY=***
       - ACCESS_TOKEN_SECRET=***
     volumes:
-      - ./tweets.sqlite:/app/data/tweets.sqlite
+      - ./data/:/app/data/

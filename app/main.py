@@ -1,7 +1,8 @@
 from typing import List, Union
+from asyncio import sleep
 
 import pandas as pd
-from fastapi import FastAPI, status, HTTPException
+from fastapi import FastAPI, status, HTTPException, WebSocket
 from fastapi.middleware.cors import CORSMiddleware
 
 from data import load_users, load_parties, load_coalitions, \
@@ -411,3 +412,16 @@ async def get_tweets_by_topic(topic_id: int, limit: int = 5):
         )
         return topic_tweets.apply(tweets_from_rows, axis=1).tolist() if len(
             topic_tweets) > 0 else []
+
+
+@app.websocket("/test_ws")
+async def test_websocket_endpoint(websocket: WebSocket):
+    await websocket.accept()
+    await websocket.send_text("Ala ma kota")
+    await sleep(3)
+    await websocket.send_text("Ale jej zdechl")
+
+
+@app.websocket("/new")
+async def analyze_new_username(websocket: WebSocket):
+    pass

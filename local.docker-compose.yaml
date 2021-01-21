@@ -9,3 +9,24 @@ services:
       - twitter_credentials.env
     volumes:
       - ./backend_service/app/:/app/
+
+  worker:
+    image: piotrgramacki/sma-celery:0.1
+    command: [celery, --app=tweets.app, worker]
+    environment: &env
+      - CELERY_BROKER_URL=amqp://guest:guest@rabbitmq:5672
+      - CELERY_RESULT_BACKEND=rpc
+    depends_on:
+      - rabbitmq
+
+  runner:
+    image: piotrgramacki/sma-celery:0.1
+    command: [python, dummy.py]
+    environment: *env
+    depends_on:
+      - rabbitmq
+    volumes:
+      - ./celery_service/app:/app
+
+  rabbitmq:
+    image: rabbitmq:3.8

@@ -1,0 +1,11 @@
+version: '3.8'
+
+services:
+  api:
+    image: piotrgramacki/sma-backend:0.6
+    ports:
+      - 4000:80
+    env_file:
+      - twitter_credentials.env
+    volumes:
+      - ./backend_service/app/:/app/

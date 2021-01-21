@@ -1,5 +1,5 @@
-from typing import List, Union
-from asyncio import sleep
+import asyncio
+from typing import List, Dict
 
 import pandas as pd
 from fastapi import FastAPI, status, HTTPException, WebSocket
@@ -9,6 +9,7 @@ from data import load_users, load_parties, load_coalitions, \
     load_topics_distributions, load_sentiment_distributions, \
     load_words_per_topic, load_words_counts, get_db_engine
 from models import *
+from settings import STATUS_OK, STATUS_ERROR
 from response import TopicDistribution, WordsCounts, ProfileImage
 from twitter import get_twitter_api_instance, get_profile_photo
 
@@ -30,9 +31,9 @@ twitterAPI = get_twitter_api_instance()
 db_engine = get_db_engine()
 
 
-def get_tweets_by_column(
+async def get_tweets_by_column(
         column_name: str,
-        column_value: Union[str, int],
+        column_value: str,
         limit: int = 5,
         sentiment: Optional[str] = None,
         topic: Optional[int] = None
@@ -141,7 +142,7 @@ async def get_tweets_by_username(
             detail='User not found'
         )
     else:
-        user_tweets = get_tweets_by_column(
+        user_tweets = await get_tweets_by_column(
             column_name='username',
             column_value=username,
             limit=limit,
@@ -251,7 +252,7 @@ async def get_tweets_by_party(
             detail='User not found'
         )
     else:
-        party_tweets = get_tweets_by_column(
+        party_tweets = await get_tweets_by_column(
             column_name='party',
             column_value=party.name,
             limit=limit,
@@ -347,7 +348,7 @@ async def get_tweets_by_coalition(
             detail='User not found'
         )
     else:
-        coalition_tweets = get_tweets_by_column(
+        coalition_tweets = await get_tweets_by_column(
             column_name='coalition',
             column_value=coalition.name,
             limit=limit,
@@ -356,13 +357,6 @@ async def get_tweets_by_coalition(
         )
         return coalition_tweets.apply(tweets_from_rows, axis=1).tolist() if len(
             coalition_tweets) > 0 else []
-
-
-@app.get("/topic")
-async def get_topics() -> List[int]:
-    topics = words_per_topic.keys()
-
-    return list(topics)
 
 
 @app.get("/topic/{topic_id}/sentiment")
@@ -392,36 +386,65 @@ async def get_words_by_topic(topic_id: int, limit: int = 100):
         return words_per_topic[topic_id][:limit]
 
 
-@app.get("/topic/{topic_id}/tweets", response_model=List[Tweet])
-async def get_tweets_by_topic(topic_id: int, limit: int = 5):
-    if topic_id not in words_per_topic.keys():
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail='User not found')
-    elif limit < 1:
-        raise HTTPException(
-            status_code=status.HTTP_406_NOT_ACCEPTABLE,
-            detail='Limit must be positive integer'
-        )
-    else:
-        topic_tweets = get_tweets_by_column(
-            column_name='topic',
-            column_value=topic_id,
-            topic=topic_id,
-            limit=limit
-        )
-        return topic_tweets.apply(tweets_from_rows, axis=1).tolist() if len(
-            topic_tweets) > 0 else []
-
-
 @app.websocket("/test_ws")
 async def test_websocket_endpoint(websocket: WebSocket):
     await websocket.accept()
     await websocket.send_text("Ala ma kota")
-    await sleep(3)
+    await asyncio.sleep(3)
+    print("x")
     await websocket.send_text("Ale jej zdechl")
+
+
+def get_response(curr_status: str, text: str) -> Dict[str, str]:
+    return {
+        "status": curr_status,
+        "text": text
+    }
+
+
+async def download_tweets(username: str) -> pd.DataFrame:
+    if username == 'xxx':
+        return pd.DataFrame.from_records([("x", 12), ("y", 13)])
+    else:
+        return pd.DataFrame()
 
 
 @app.websocket("/new")
 async def analyze_new_username(websocket: WebSocket):
-    pass
+    await websocket.accept()
+
+    try:
+        username = await websocket.receive_text()
+
+        if username in [user.username for user in users]:
+            await websocket.send_json(
+                get_response(STATUS_ERROR,
+                             "This account is already available"))
+            await websocket.close()
+
+        await websocket.send_json(
+            get_response(STATUS_OK,
+                         f"Collecting tweets from {username} account"))
+
+        tweets = await download_tweets(username)
+        print(len(tweets))
+        if len(tweets) == 0:
+            await websocket.send_json(
+                get_response(STATUS_ERROR,
+                             f"No tweets found for {username} account")
+            )
+            await websocket.close()
+        else:
+            await websocket.send_json(
+                get_response(STATUS_OK,
+                             f"Calculating embedding for {username}"))
+
+        await asyncio.sleep(4)
+    except Exception as e:
+        # FIXME - this one needs fixing,
+        #  but I don't know how to cache exception while in await state :(
+        #  Should just catch WebSocketDisconnect
+        # TODO - try to find a way to stop running task on disconnection
+        print(e)
+        print("disconnected")
+

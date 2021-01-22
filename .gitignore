@@ -7,3 +7,4 @@ venv
 /.python-version
 *.ipynb
 *.sqlite
+twitter_credentials.env

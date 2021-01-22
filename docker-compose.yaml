@@ -24,7 +24,7 @@ services:
       - /etc/letsencrypt/live/embedd.ml/privkey.pem:/secrets/key.pem
       - ./certs-traefik.yaml:/etc/traefik/dynamic/certs-traefik.yaml
   api:
-    image: piotrgramacki/sma-backend:0.7
+    image: piotrgramacki/sma-backend:0.8
     labels:
       - "traefik.http.routers.api.entrypoints=https"
       - "traefik.http.routers.api.tls=true"

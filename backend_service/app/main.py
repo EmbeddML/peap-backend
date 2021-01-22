@@ -1,5 +1,5 @@
 import asyncio
-from typing import List, Dict
+from typing import List, Dict, Union
 
 import pandas as pd
 from celery import Celery, signature
@@ -38,7 +38,7 @@ db_engine = get_db_engine()
 
 async def get_tweets_by_column(
         column_name: str,
-        column_value: str,
+        column_value: Union[str, int],
         limit: int = 5,
         sentiment: Optional[str] = None,
         topic: Optional[int] = None
@@ -364,6 +364,13 @@ async def get_tweets_by_coalition(
             coalition_tweets) > 0 else []
 
 
+@app.get("/topic")
+async def get_topics() -> List[int]:
+    topics = words_per_topic.keys()
+
+    return list(topics)
+
+
 @app.get("/topic/{topic_id}/sentiment")
 async def get_sentiment_by_topic(topic_id: int):
     sentiment_per_topic = sentiment_dist['per_topic']
@@ -389,6 +396,28 @@ async def get_words_by_topic(topic_id: int, limit: int = 100):
         )
     else:
         return words_per_topic[topic_id][:limit]
+
+
+@app.get("/topic/{topic_id}/tweets", response_model=List[Tweet])
+async def get_tweets_by_topic(topic_id: int, limit: int = 5):
+    if topic_id not in words_per_topic.keys():
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail='User not found')
+    elif limit < 1:
+        raise HTTPException(
+            status_code=status.HTTP_406_NOT_ACCEPTABLE,
+            detail='Limit must be positive integer'
+        )
+    else:
+        topic_tweets = await get_tweets_by_column(
+            column_name='topic',
+            column_value=topic_id,
+            topic=topic_id,
+            limit=limit
+        )
+        return topic_tweets.apply(tweets_from_rows, axis=1).tolist() if len(
+            topic_tweets) > 0 else []
 
 
 @app.websocket("/test_ws")

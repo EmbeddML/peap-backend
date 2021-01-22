@@ -6,27 +6,18 @@ services:
     ports:
       - 4000:80
     env_file:
-      - twitter_credentials.env
+      - env_files/twitter_credentials.env
+      - env_files/celery.env
     volumes:
       - ./backend_service/app/:/app/
 
-  worker:
+  tweets-worker:
     image: piotrgramacki/sma-celery:0.1
     command: [celery, --app=tweets.app, worker]
-    environment: &env
-      - CELERY_BROKER_URL=amqp://guest:guest@rabbitmq:5672
-      - CELERY_RESULT_BACKEND=rpc
+    env_file:
+      - env_files/celery.env
     depends_on:
       - rabbitmq
-
-  runner:
-    image: piotrgramacki/sma-celery:0.1
-    command: [python, dummy.py]
-    environment: *env
-    depends_on:
-      - rabbitmq
-    volumes:
-      - ./celery_service/app:/app
 
   rabbitmq:
     image: rabbitmq:3.8

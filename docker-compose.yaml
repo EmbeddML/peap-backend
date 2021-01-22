@@ -31,6 +31,18 @@ services:
       - "traefik.http.routers.api.rule=Host(`api-politicians.embedd.ml`)"
       - "traefik.http.services.api-service.loadbalancer.server.port=80"
     env_file:
-      - twitter_credentials.env
+      - env_files/twitter_credentials.env
+      - env_files/celery.env
     volumes:
       - ./data/:/app/data/
+
+  tweets-worker:
+    image: piotrgramacki/sma-celery:0.1
+    command: [ celery, --app=tweets.app, worker ]
+    env_file:
+      - env_files/celery.env
+    depends_on:
+      - rabbitmq
+
+  rabbitmq:
+    image: rabbitmq:3.8

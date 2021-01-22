@@ -2,18 +2,23 @@ import asyncio
 from typing import List, Dict
 
 import pandas as pd
+from celery import Celery, signature
 from fastapi import FastAPI, status, HTTPException, WebSocket
 from fastapi.middleware.cors import CORSMiddleware
 
+import celery_conf
 from data import load_users, load_parties, load_coalitions, \
     load_topics_distributions, load_sentiment_distributions, \
     load_words_per_topic, load_words_counts, get_db_engine
 from models import *
-from settings import STATUS_OK, STATUS_ERROR
 from response import TopicDistribution, WordsCounts, ProfileImage
+from settings import STATUS_OK, STATUS_ERROR
 from twitter import get_twitter_api_instance, get_profile_photo
 
 app = FastAPI()
+
+celery_app = Celery()
+celery_app.config_from_object(celery_conf)
 
 app.add_middleware(CORSMiddleware, allow_origins=["*"])
 
@@ -403,10 +408,9 @@ def get_response(curr_status: str, text: str) -> Dict[str, str]:
 
 
 async def download_tweets(username: str) -> pd.DataFrame:
-    if username == 'xxx':
-        return pd.DataFrame.from_records([("x", 12), ("y", 13)])
-    else:
-        return pd.DataFrame()
+    tweets = signature('get_tweets', args=(username, )).delay()
+
+    return tweets.get()
 
 
 @app.websocket("/new")
@@ -421,13 +425,15 @@ async def analyze_new_username(websocket: WebSocket):
                 get_response(STATUS_ERROR,
                              "This account is already available"))
             await websocket.close()
+        else:
+            await websocket.send_json(
+                get_response(STATUS_OK,
+                             f"Collecting tweets from {username} account"))
 
-        await websocket.send_json(
-            get_response(STATUS_OK,
-                         f"Collecting tweets from {username} account"))
-
+        await asyncio.sleep(2)
+        # print("Starts with tweets")
         tweets = await download_tweets(username)
-        print(len(tweets))
+        # print(len(tweets))
         if len(tweets) == 0:
             await websocket.send_json(
                 get_response(STATUS_ERROR,
@@ -439,7 +445,7 @@ async def analyze_new_username(websocket: WebSocket):
                 get_response(STATUS_OK,
                              f"Calculating embedding for {username}"))
 
-        await asyncio.sleep(4)
+            await asyncio.sleep(4)
     except Exception as e:
         # FIXME - this one needs fixing,
         #  but I don't know how to cache exception while in await state :(

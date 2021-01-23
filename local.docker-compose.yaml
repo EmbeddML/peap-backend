@@ -12,7 +12,7 @@ services:
       - ./backend_service/app/:/app/
 
   tweets-worker:
-    image: piotrgramacki/sma-celery:0.1
+    image: piotrgramacki/sma-celery:0.2
     command: [celery, --app=tweets.app, worker]
     env_file:
       - env_files/celery.env

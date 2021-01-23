@@ -36,13 +36,7 @@ services:
     volumes:
       - ./data/:/app/data/
 
-  tweets-worker:
-    image: piotrgramacki/sma-celery:0.1
-    command: [ celery, --app=tweets.app, worker ]
-    env_file:
-      - env_files/celery.env
-    depends_on:
-      - rabbitmq
-
   rabbitmq:
     image: rabbitmq:3.8
+    ports:
+      - 35672:5672

@@ -3,7 +3,7 @@ version: '3.8'
 services:
   tweets-worker:
     image: piotrgramacki/sma-celery:0.2
-    command: [celery, --app=tweets.app, worker]
+    command: [celery, --app=tweets.app, worker, -Q, tweets]
     environment:
       - CELERY_BROKER_URL=amqp://guest:guest@embedd.ml:35672
       - CELERY_RESULT_BACKEND=rpc

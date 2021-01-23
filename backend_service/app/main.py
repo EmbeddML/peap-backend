@@ -437,7 +437,8 @@ def get_response(curr_status: str, text: str) -> Dict[str, str]:
 
 
 async def download_tweets(username: str) -> pd.DataFrame:
-    tweets = signature('get_tweets', args=(username, )).delay()
+    tweets = signature('get_tweets', args=(username, ),
+                       options={'queue': 'tweets'}).delay()
 
     return tweets.get()
 

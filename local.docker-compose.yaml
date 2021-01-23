@@ -13,7 +13,7 @@ services:
 
   tweets-worker:
     image: piotrgramacki/sma-celery:0.2
-    command: [celery, --app=tweets.app, worker]
+    command: [celery, --app=tweets.app, worker, -Q, tweets]
     env_file:
       - env_files/celery.env
     depends_on:

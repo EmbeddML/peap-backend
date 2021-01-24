@@ -1,4 +1,3 @@
-from dataclasses import dataclass
 from typing import Optional
 
 from pydantic import BaseModel
@@ -6,10 +5,10 @@ from pydantic import BaseModel
 
 class User(BaseModel):
     username: str
-    party: str
-    coalition: str
-    role: str
-    name: str
+    party: Optional[str]
+    coalition: Optional[str]
+    role: Optional[str]
+    name: Optional[str]
     tweets_count: int
     x_graph2d: float
     y_graph2d: float

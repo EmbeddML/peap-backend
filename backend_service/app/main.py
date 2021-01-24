@@ -3,7 +3,7 @@ import logging
 from typing import List, Dict, Union
 
 import pandas as pd
-from celery import Celery, signature, chain
+from celery import Celery, signature, chain, group
 from fastapi import FastAPI, status, HTTPException, WebSocket
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -467,7 +467,7 @@ async def download_tweets(username: str) -> pd.DataFrame:
         return tweets_getting.get()
 
 
-async def analyze(tweets: pd.DataFrame) -> pd.DataFrame:
+async def analyze(tweets: pd.DataFrame):
     cleaning = signature('clean', args=(tweets,),
                          options={'queue': 'cleaning'}).delay()
 
@@ -476,10 +476,10 @@ async def analyze(tweets: pd.DataFrame) -> pd.DataFrame:
 
     cleaned = cleaning.get()
 
-    lemmatization = chain(
-        signature('lemmatize', args=(cleaned,), options={'queue': 'cleaning'}),
-        signature('stopwords', options={'queue': 'cleaning'})
-    ).delay()
+    # lemmatization = chain(
+    #     signature('lemmatize', args=(cleaned,), options={'queue': 'cleaning'}),
+    #     signature('stopwords', options={'queue': 'cleaning'})
+    # ).delay()
 
     emoji_removal = signature('emoji', args=(cleaned,),
                               options={'queue': 'cleaning'}).delay()
@@ -487,10 +487,28 @@ async def analyze(tweets: pd.DataFrame) -> pd.DataFrame:
     while not emoji_removal.ready():
         await asyncio.sleep(1)
 
-    while not lemmatization.ready():
-        await asyncio.sleep(5)
+    emojied = emoji_removal.get()
 
-    return lemmatization.get()
+    emb_calc = signature('embedding', args=(emojied, ),
+                         options={'queue': 'embedding'}).delay()
+
+    while not emb_calc.ready():
+        await asyncio.sleep(1)
+
+    emb_res = emb_calc.get()
+
+    clustering = signature('clustering', args=(emb_res, ),
+                           options={'queue': 'embedding'}).delay()
+    graph = signature('graph', options={'queue': 'embedding'}).delay(emb_res)
+
+    while not clustering.ready() and not graph.ready():
+        await asyncio.sleep(1)
+
+    clustering_res = clustering.get()
+    graph_res = graph.get()
+    # lemma_res = lemmatization.get()
+
+    return clustering_res, graph_res, len(cleaned)
 
 
 @app.websocket("/new")
@@ -526,19 +544,36 @@ async def analyze_new_username(websocket: WebSocket):
                              f"Analyzing tweets for {username}"))
 
         await asyncio.sleep(1)
-        cleaned = await analyze(tweets)
+        cluster, graph, tweets_count = await analyze(tweets)
 
-        await websocket.send_text(f'{len(cleaned)}')
+        user = User(
+            username=username,
+            party=None,
+            coalition=None,
+            role=None,
+            name=None,
+            tweets_count=tweets_count,
+            x_graph2d=graph['2D_x'],
+            y_graph2d=graph['2D_y'],
+            x_graph3d=graph['3D_x'],
+            y_graph3d=graph['3D_y'],
+            z_graph3d=graph['3D_z'],
+            cluster_dbscan_id=cluster['dbscan_cluster'],
+            cluster_kmeans_id=cluster['kmeans_cluster'],
+            cluster_pam_id=cluster['pam_cluster']
+        )
+
+        await websocket.send_json(user.dict())
     except WrongUsernameException:
         await websocket.send_json(
             get_response(STATUS_ERROR,
                          f"Can't find {username} account")
         )
         await websocket.close()
-    except Exception as e:
-        # FIXME - this one needs fixing,
-        #  but I don't know how to cache exception while in await state :(
-        #  Should just catch WebSocketDisconnect
-        # TODO - try to find a way to stop running task on disconnection
-        print(e)
-        print("disconnected")
+    # except Exception as e:
+    #     # FIXME - this one needs fixing,
+    #     #  but I don't know how to cache exception while in await state :(
+    #     #  Should just catch WebSocketDisconnect
+    #     # TODO - try to find a way to stop running task on disconnection
+    #     print(e)
+    #     print("disconnected")

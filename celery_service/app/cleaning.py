@@ -25,7 +25,7 @@ def clean_tweets(self, df: pd.DataFrame) -> pd.DataFrame:
     df = df[df["tweet_length"] >= 20]
     df.drop(columns="tweet_length")
 
-    LOG.info('Cleaning - done')
+    LOG.info(f'Cleaning - done, left with {len(df)}')
     return df
 
 

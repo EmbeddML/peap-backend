@@ -18,6 +18,8 @@ services:
       - env_files/celery.env
     depends_on:
       - rabbitmq
+    volumes:
+      - ./celery_service/app:/app/
 
   embedding-worker:
     image: piotrgramacki/sma-celery:processing

@@ -1,9 +1,9 @@
 import asyncio
-from typing import List, Dict, Union
 import logging
+from typing import List, Dict, Union
 
 import pandas as pd
-from celery import Celery, signature, group, chain
+from celery import Celery, signature, chain
 from fastapi import FastAPI, status, HTTPException, WebSocket
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -11,6 +11,7 @@ import celery_conf
 from data import load_users, load_parties, load_coalitions, \
     load_topics_distributions, load_sentiment_distributions, \
     load_words_per_topic, load_words_counts, get_db_engine
+from exceptions import WrongUsernameException
 from models import *
 from response import TopicDistribution, WordsCounts, ProfileImage
 from settings import STATUS_OK, STATUS_ERROR
@@ -458,9 +459,12 @@ async def download_tweets(username: str) -> pd.DataFrame:
                                options={'queue': 'tweets'}).delay()
 
     while not tweets_getting.ready():
-        await asyncio.sleep(5)
+        await asyncio.sleep(2)
 
-    return tweets_getting.get()
+    if tweets_getting.failed():
+        raise WrongUsernameException()
+    else:
+        return tweets_getting.get()
 
 
 async def analyze(tweets: pd.DataFrame) -> pd.DataFrame:
@@ -468,8 +472,7 @@ async def analyze(tweets: pd.DataFrame) -> pd.DataFrame:
                          options={'queue': 'cleaning'}).delay()
 
     while not cleaning.ready():
-        LOG.info("Waiting...")
-        await asyncio.sleep(5)
+        await asyncio.sleep(1)
 
     cleaned = cleaning.get()
 
@@ -481,8 +484,10 @@ async def analyze(tweets: pd.DataFrame) -> pd.DataFrame:
     emoji_removal = signature('emoji', args=(cleaned,),
                               options={'queue': 'cleaning'}).delay()
 
-    while (not lemmatization.ready()) or (not emoji_removal.ready()):
-        LOG.info(f"Yet again waiting...{lemmatization.ready()}, {emoji_removal.ready()}")
+    while not emoji_removal.ready():
+        await asyncio.sleep(1)
+
+    while not lemmatization.ready():
         await asyncio.sleep(5)
 
     return lemmatization.get()
@@ -491,42 +496,49 @@ async def analyze(tweets: pd.DataFrame) -> pd.DataFrame:
 @app.websocket("/new")
 async def analyze_new_username(websocket: WebSocket):
     await websocket.accept()
-    #
-    # try:
+
     username = await websocket.receive_text()
 
-    if username in [user.username for user in users]:
+    try:
+        if username in [user.username for user in users]:
+            await websocket.send_json(
+                get_response(STATUS_ERROR,
+                             "This account is already available"))
+            await websocket.close()
+        else:
+            await websocket.send_json(
+                get_response(STATUS_OK,
+                             f"Collecting tweets from {username} account"))
+
+        await asyncio.sleep(1)
+
+        tweets = await download_tweets(username)
+
+        if len(tweets) == 0:
+            await websocket.send_json(
+                get_response(STATUS_ERROR,
+                             f"No tweets found for {username} account")
+            )
+            await websocket.close()
+        else:
+            await websocket.send_json(
+                get_response(STATUS_OK,
+                             f"Analyzing tweets for {username}"))
+
+        await asyncio.sleep(1)
+        cleaned = await analyze(tweets)
+
+        await websocket.send_text(f'{len(cleaned)}')
+    except WrongUsernameException:
         await websocket.send_json(
             get_response(STATUS_ERROR,
-                         "This account is already available"))
-        await websocket.close()
-    else:
-        await websocket.send_json(
-            get_response(STATUS_OK,
-                         f"Collecting tweets from {username} account"))
-
-    await asyncio.sleep(1)
-    tweets = await download_tweets(username)
-
-    if len(tweets) == 0:
-        await websocket.send_json(
-            get_response(STATUS_ERROR,
-                         f"No tweets found for {username} account")
+                         f"Can't find {username} account")
         )
         await websocket.close()
-    else:
-        await websocket.send_json(
-            get_response(STATUS_OK,
-                         f"Analyzing tweets for {username}"))
-
-    await asyncio.sleep(1)
-    cleaned = await analyze(tweets)
-
-    await websocket.send_text(f'{len(cleaned)}')
-    # except Exception as e:
-    #     # FIXME - this one needs fixing,
-    #     #  but I don't know how to cache exception while in await state :(
-    #     #  Should just catch WebSocketDisconnect
-    #     # TODO - try to find a way to stop running task on disconnection
-    #     print(e)
-    #     print("disconnected")
+    except Exception as e:
+        # FIXME - this one needs fixing,
+        #  but I don't know how to cache exception while in await state :(
+        #  Should just catch WebSocketDisconnect
+        # TODO - try to find a way to stop running task on disconnection
+        print(e)
+        print("disconnected")

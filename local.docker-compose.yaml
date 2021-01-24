@@ -22,8 +22,18 @@ services:
       - ./celery_service/app:/app/
 
   embedding-worker:
-    image: piotrgramacki/sma-celery:processing
+    image: piotrgramacki/sma-celery:embedding
     command: [celery, --app=embedding.app, worker, -Q, embedding]
+    env_file:
+      - env_files/celery.env
+    depends_on:
+      - rabbitmq
+    volumes:
+    - ./celery_service/app:/app/
+
+  processing-worker:
+    image: piotrgramacki/sma-celery:processing
+    command: [celery, --app=processing.app, worker, -Q, processing]
     env_file:
       - env_files/celery.env
     depends_on:

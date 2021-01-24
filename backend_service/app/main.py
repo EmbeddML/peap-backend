@@ -498,8 +498,8 @@ async def analyze(tweets: pd.DataFrame):
     emb_res = emb_calc.get()
 
     clustering = signature('clustering', args=(emb_res, ),
-                           options={'queue': 'embedding'}).delay()
-    graph = signature('graph', options={'queue': 'embedding'}).delay(emb_res)
+                           options={'queue': 'processing'}).delay()
+    graph = signature('graph', options={'queue': 'processing'}).delay(emb_res)
 
     while not clustering.ready() and not graph.ready():
         await asyncio.sleep(1)

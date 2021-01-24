@@ -12,12 +12,36 @@ services:
       - ./backend_service/app/:/app/
 
   tweets-worker:
-    image: piotrgramacki/sma-celery:0.2
+    image: piotrgramacki/sma-celery:tweets
     command: [celery, --app=tweets.app, worker, -Q, tweets]
     env_file:
       - env_files/celery.env
     depends_on:
       - rabbitmq
+
+  embedding-worker:
+    image: piotrgramacki/sma-celery:processing
+    command: [celery, --app=embedding.app, worker, -Q, embedding]
+    env_file:
+      - env_files/celery.env
+    depends_on:
+      - rabbitmq
+    volumes:
+    - ./celery_service/app:/app/
+
+  cleaning-worker:
+    image: piotrgramacki/sma-celery:processing
+    command: [celery, --app=cleaning.app, worker, -Q, cleaning]
+    env_file:
+      - env_files/celery.env
+    depends_on:
+      - rabbitmq
+      - krnnt
+    volumes:
+      - ./celery_service/app:/app/
+
+  krnnt:
+    image: djstrong/krnnt:1.0.0
 
   rabbitmq:
     image: rabbitmq:3.8

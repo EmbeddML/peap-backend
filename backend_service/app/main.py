@@ -1,8 +1,9 @@
 import asyncio
 from typing import List, Dict, Union
+import logging
 
 import pandas as pd
-from celery import Celery, signature
+from celery import Celery, signature, group, chain
 from fastapi import FastAPI, status, HTTPException, WebSocket
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -34,6 +35,22 @@ words_counts = load_words_counts()
 twitterAPI = get_twitter_api_instance()
 
 db_engine = get_db_engine()
+
+
+def get_logger(mod_name):
+    """Configure logger and return."""
+    logger = logging.getLogger(mod_name)
+    logger.propagate = False
+    handler = logging.StreamHandler()
+    formatter = logging.Formatter(
+        '%(asctime)s [%(name)-12s] %(levelname)-8s %(message)s')
+    handler.setFormatter(formatter)
+    logger.addHandler(handler)
+    logger.setLevel(logging.INFO)
+    return logger
+
+
+LOG = get_logger('BACKEND')
 
 
 async def get_tweets_by_column(
@@ -437,50 +454,79 @@ def get_response(curr_status: str, text: str) -> Dict[str, str]:
 
 
 async def download_tweets(username: str) -> pd.DataFrame:
-    tweets = signature('get_tweets', args=(username, ),
-                       options={'queue': 'tweets'}).delay()
+    tweets_getting = signature('get_tweets', args=(username,),
+                               options={'queue': 'tweets'}).delay()
 
-    return tweets.get()
+    while not tweets_getting.ready():
+        await asyncio.sleep(5)
+
+    return tweets_getting.get()
+
+
+async def analyze(tweets: pd.DataFrame) -> pd.DataFrame:
+    cleaning = signature('clean', args=(tweets,),
+                         options={'queue': 'cleaning'}).delay()
+
+    while not cleaning.ready():
+        LOG.info("Waiting...")
+        await asyncio.sleep(5)
+
+    cleaned = cleaning.get()
+
+    lemmatization = chain(
+        signature('lemmatize', args=(cleaned,), options={'queue': 'cleaning'}),
+        signature('stopwords', options={'queue': 'cleaning'})
+    ).delay()
+
+    emoji_removal = signature('emoji', args=(cleaned,),
+                              options={'queue': 'cleaning'}).delay()
+
+    while (not lemmatization.ready()) or (not emoji_removal.ready()):
+        LOG.info(f"Yet again waiting...{lemmatization.ready()}, {emoji_removal.ready()}")
+        await asyncio.sleep(5)
+
+    return lemmatization.get()
 
 
 @app.websocket("/new")
 async def analyze_new_username(websocket: WebSocket):
     await websocket.accept()
+    #
+    # try:
+    username = await websocket.receive_text()
 
-    try:
-        username = await websocket.receive_text()
+    if username in [user.username for user in users]:
+        await websocket.send_json(
+            get_response(STATUS_ERROR,
+                         "This account is already available"))
+        await websocket.close()
+    else:
+        await websocket.send_json(
+            get_response(STATUS_OK,
+                         f"Collecting tweets from {username} account"))
 
-        if username in [user.username for user in users]:
-            await websocket.send_json(
-                get_response(STATUS_ERROR,
-                             "This account is already available"))
-            await websocket.close()
-        else:
-            await websocket.send_json(
-                get_response(STATUS_OK,
-                             f"Collecting tweets from {username} account"))
+    await asyncio.sleep(1)
+    tweets = await download_tweets(username)
 
-        await asyncio.sleep(2)
-        # print("Starts with tweets")
-        tweets = await download_tweets(username)
-        # print(len(tweets))
-        if len(tweets) == 0:
-            await websocket.send_json(
-                get_response(STATUS_ERROR,
-                             f"No tweets found for {username} account")
-            )
-            await websocket.close()
-        else:
-            await websocket.send_json(
-                get_response(STATUS_OK,
-                             f"Calculating embedding for {username}"))
+    if len(tweets) == 0:
+        await websocket.send_json(
+            get_response(STATUS_ERROR,
+                         f"No tweets found for {username} account")
+        )
+        await websocket.close()
+    else:
+        await websocket.send_json(
+            get_response(STATUS_OK,
+                         f"Analyzing tweets for {username}"))
 
-            await asyncio.sleep(4)
-    except Exception as e:
-        # FIXME - this one needs fixing,
-        #  but I don't know how to cache exception while in await state :(
-        #  Should just catch WebSocketDisconnect
-        # TODO - try to find a way to stop running task on disconnection
-        print(e)
-        print("disconnected")
+    await asyncio.sleep(1)
+    cleaned = await analyze(tweets)
 
+    await websocket.send_text(f'{len(cleaned)}')
+    # except Exception as e:
+    #     # FIXME - this one needs fixing,
+    #     #  but I don't know how to cache exception while in await state :(
+    #     #  Should just catch WebSocketDisconnect
+    #     # TODO - try to find a way to stop running task on disconnection
+    #     print(e)
+    #     print("disconnected")

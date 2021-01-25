@@ -7,3 +7,4 @@ services:
     environment:
       - CELERY_BROKER_URL=amqp://guest:guest@embedd.ml:35672
       - CELERY_RESULT_BACKEND=rpc
+      - TWEETS_LIMIT=500

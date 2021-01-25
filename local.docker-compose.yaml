@@ -2,7 +2,7 @@ version: '3.8'
 
 services:
   api:
-    image: piotrgramacki/sma-backend:0.9
+    image: piotrgramacki/sma-backend:0.10
     ports:
       - 4000:80
     env_file:
@@ -18,14 +18,16 @@ services:
     command: [celery, --app=tweets.app, worker, -Q, tweets]
     env_file:
       - env_files/celery.env
+    environment:
+      - TWEETS_LIMIT=500
     depends_on:
       - rabbitmq
     volumes:
       - ./celery_service/app:/app/
 
   embedding-worker:
-    image: piotrgramacki/sma-celery:embedding
-    command: [celery, --app=embedding.app, worker, -Q, embedding]
+    image: piotrgramacki/sma-celery:processing
+    command: [celery, --app=embedding.app, worker, --pool=solo, -Q, embedding]
     env_file:
       - env_files/celery.env
     depends_on:
@@ -59,3 +61,5 @@ services:
 
   rabbitmq:
     image: rabbitmq:3.8
+    volumes:
+      - ./rabbitmq.conf:/etc/rabbitmq/rabbitmq.conf

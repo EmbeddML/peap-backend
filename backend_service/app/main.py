@@ -3,7 +3,7 @@ import logging
 from typing import List, Dict, Union
 
 import pandas as pd
-from celery import Celery, signature, chain, group
+from celery import Celery, signature, chain
 from fastapi import FastAPI, status, HTTPException, WebSocket
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -11,7 +11,7 @@ import celery_conf
 from data import load_users, load_parties, load_coalitions, \
     load_topics_distributions, load_sentiment_distributions, \
     load_words_per_topic, load_words_counts, get_db_engine
-from exceptions import WrongUsernameException
+from exceptions import WrongUsernameException, NoTweetsLeftException
 from models import *
 from response import TopicDistribution, WordsCounts, ProfileImage
 from settings import STATUS_OK, STATUS_ERROR
@@ -507,6 +507,11 @@ async def analyze(tweets: pd.DataFrame):
 
     cleaned = cleaning.get()
 
+    if len(cleaned) == 0:
+        raise NoTweetsLeftException()
+
+    await asyncio.sleep(1)
+
     lemmatization = chain(
         signature('lemmatize', args=(cleaned,), options={'queue': 'cleaning'}),
         signature('stopwords', options={'queue': 'cleaning'})
@@ -525,21 +530,6 @@ async def analyze(tweets: pd.DataFrame):
 
     emb_calc = signature('embedding', args=(emojied, ),
                          options={'queue': 'embedding'}).delay()
-
-    while not emb_calc.ready():
-        await asyncio.sleep(1)
-
-    emb_res = emb_calc.get()
-
-    clustering = signature('clustering', args=(emb_res, ),
-                           options={'queue': 'processing'}).delay()
-    graph = signature('graph', options={'queue': 'processing'}).delay(emb_res)
-
-    while not clustering.ready() and not graph.ready():
-        await asyncio.sleep(1)
-
-    clustering_res = clustering.get()
-    graph_res = graph.get()
 
     while not lemmatization.ready():
         await asyncio.sleep(1)
@@ -567,6 +557,21 @@ async def analyze(tweets: pd.DataFrame):
 
     sentiment_df, sentiment_distribution = sentiment.get()
 
+    while not emb_calc.ready():
+        await asyncio.sleep(1)
+
+    emb_res = emb_calc.get()
+
+    clustering = signature('clustering', args=(emb_res, ),
+                           options={'queue': 'processing'}).delay()
+    graph = signature('graph', options={'queue': 'processing'}).delay(emb_res)
+
+    while not clustering.ready() and not graph.ready():
+        await asyncio.sleep(1)
+
+    clustering_res = clustering.get()
+    graph_res = graph.get()
+
     return clustering_res, graph_res, len(cleaned), topics_df, topics_distribution, sentiment_df, sentiment_distribution, words_dict
 
 
@@ -587,58 +592,65 @@ async def analyze_new_username(websocket: WebSocket):
                 get_response(STATUS_OK,
                              f"Collecting tweets from {username} account"))
 
-        await asyncio.sleep(1)
+            await asyncio.sleep(1)
 
-        tweets = await download_tweets(username)
+            tweets = await download_tweets(username)
 
-        if len(tweets) == 0:
-            await websocket.send_json(
-                get_response(STATUS_ERROR,
-                             f"No tweets found for {username} account")
-            )
-            await websocket.close()
-        else:
-            await websocket.send_json(
-                get_response(STATUS_OK,
-                             f"Analyzing tweets for {username}"))
+            if len(tweets) == 0:
+                await websocket.send_json(
+                    get_response(STATUS_ERROR,
+                                 f"No tweets found for {username} account")
+                )
+                await websocket.close()
+            else:
+                await websocket.send_json(
+                    get_response(STATUS_OK,
+                                 f"Analyzing tweets for {username}"))
 
-        await asyncio.sleep(1)
-        cluster, graph, tweets_count, topics, topics_distribution, sentiment, sentiment_distribution, words = await analyze(tweets)
+                await asyncio.sleep(1)
 
-        user = User(
-            username=username,
-            party=None,
-            coalition=None,
-            role=None,
-            name=None,
-            tweets_count=tweets_count,
-            x_graph2d=graph['2D_x'],
-            y_graph2d=graph['2D_y'],
-            x_graph3d=graph['3D_x'],
-            y_graph3d=graph['3D_y'],
-            z_graph3d=graph['3D_z'],
-            cluster_dbscan_id=cluster['dbscan_cluster'],
-            cluster_kmeans_id=cluster['kmeans_cluster'],
-            cluster_pam_id=cluster['pam_cluster']
-        )
-        clients_users.append(user)
+                cluster, graph, tweets_count, topics, topics_distribution, sentiment, sentiment_distribution, words = await analyze(tweets)
 
-        clients_topic_dist[username] = topics_distribution
-        client_sentiment_dist[username] = sentiment_distribution
-        clients_words_counts[username] = words
+                user = User(
+                    username=username,
+                    party=None,
+                    coalition=None,
+                    role=None,
+                    name=None,
+                    tweets_count=tweets_count,
+                    x_graph2d=graph['2D_x'],
+                    y_graph2d=graph['2D_y'],
+                    x_graph3d=graph['3D_x'],
+                    y_graph3d=graph['3D_y'],
+                    z_graph3d=graph['3D_z'],
+                    cluster_dbscan_id=cluster['dbscan_cluster'],
+                    cluster_kmeans_id=cluster['kmeans_cluster'],
+                    cluster_pam_id=cluster['pam_cluster']
+                )
+                clients_users.append(user)
 
-        full_df = tweets.merge(topics, on='id', how='right')
-        full_df = full_df.merge(sentiment, on='id', how='right')
-        full_df.to_sql('clients_tweets', db_engine, if_exists='append')
+                clients_topic_dist[username] = topics_distribution
+                client_sentiment_dist[username] = sentiment_distribution
+                clients_words_counts[username] = words
 
-        await websocket.send_json(
-            get_response(STATUS_OK,
-                         f'Finished for {username}')
-        )
+                full_df = tweets.merge(topics, on='id', how='right')
+                full_df = full_df.merge(sentiment, on='id', how='right')
+                full_df.to_sql('clients_tweets', db_engine, if_exists='append')
+
+                await websocket.send_json(
+                    get_response(STATUS_OK,
+                                 f'Finished for {username}')
+                )
     except WrongUsernameException:
         await websocket.send_json(
             get_response(STATUS_ERROR,
                          f"Can't find {username} account")
+        )
+        await websocket.close()
+    except NoTweetsLeftException:
+        await websocket.send_json(
+            get_response(STATUS_ERROR,
+                         f"No tweets found for {username} account")
         )
         await websocket.close()
     # except Exception as e:

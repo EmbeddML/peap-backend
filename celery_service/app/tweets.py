@@ -1,3 +1,5 @@
+import os
+
 from celery import Celery
 import pandas as pd
 import twint
@@ -10,6 +12,8 @@ app.config_from_object(celery_conf)
 
 LOG = get_logger('TWINT')
 
+LIMIT = int(os.getenv('TWEETS_LIMIT', 1000))
+
 
 @app.task(bind=True, name='get_tweets')
 def download_tweets(self, username: str) -> pd.DataFrame:
@@ -19,7 +23,7 @@ def download_tweets(self, username: str) -> pd.DataFrame:
     c.Pandas = True
     c.Hide_output = True
     c.Count = True
-    c.Limit = None
+    c.Limit = LIMIT
 
     twint.run.Search(c)
 

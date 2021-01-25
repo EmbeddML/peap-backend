@@ -2,12 +2,14 @@ version: '3.8'
 
 services:
   api:
-    image: piotrgramacki/sma-backend:0.8
+    image: piotrgramacki/sma-backend:0.9
     ports:
       - 4000:80
     env_file:
       - env_files/twitter_credentials.env
       - env_files/celery.env
+    environment:
+      - MAX_WORKERS=1
     volumes:
       - ./backend_service/app/:/app/
 

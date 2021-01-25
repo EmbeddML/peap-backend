@@ -8,8 +8,8 @@ import numpy as np
 import celery_conf
 from logger import get_logger
 
-tokenizer = AutoTokenizer.from_pretrained("allegro/herbert-base-cased")
-model = AutoModel.from_pretrained("allegro/herbert-base-cased")
+# tokenizer = AutoTokenizer.from_pretrained("allegro/herbert-base-cased")
+# model = AutoModel.from_pretrained("allegro/herbert-base-cased")
 
 app = Celery()
 app.config_from_object(celery_conf)
@@ -51,7 +51,8 @@ def embed_tweets(tweets_data: pd.DataFrame) -> np.ndarray:
 @app.task(bind=True, name='embedding')
 def calc_embedding(self, tweets: pd.DataFrame) -> np.ndarray:
     LOG.info('Embedding calculation - started')
-    res = embed_tweets(tweets)
+    # res = embed_tweets(tweets)
+    res = np.random.random(768)
     LOG.info('Embedding calculation - done')
 
     return res

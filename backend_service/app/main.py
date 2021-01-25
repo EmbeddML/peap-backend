@@ -25,13 +25,17 @@ celery_app.config_from_object(celery_conf)
 app.add_middleware(CORSMiddleware, allow_origins=["*"])
 
 users = load_users()
+clients_users = []
 parties = load_parties()
 coalitions = load_coalitions()
 
 topics_dist = load_topics_distributions()
+clients_topic_dist = {}
 sentiment_dist = load_sentiment_distributions()
+client_sentiment_dist = {}
 words_per_topic = load_words_per_topic()
 words_counts = load_words_counts()
+clients_words_counts = {}
 
 twitterAPI = get_twitter_api_instance()
 
@@ -39,7 +43,6 @@ db_engine = get_db_engine()
 
 
 def get_logger(mod_name):
-    """Configure logger and return."""
     logger = logging.getLogger(mod_name)
     logger.propagate = False
     handler = logging.StreamHandler()
@@ -59,10 +62,11 @@ async def get_tweets_by_column(
         column_value: Union[str, int],
         limit: int = 5,
         sentiment: Optional[str] = None,
-        topic: Optional[int] = None
+        topic: Optional[int] = None,
+        table: str = 'tweets'
 ):
     selected = pd.read_sql(
-        f"SELECT * FROM tweets WHERE {column_name} = \"{column_value}\"",
+        f"SELECT * FROM {table} WHERE {column_name} = \"{column_value}\"",
         db_engine
     )
 
@@ -100,13 +104,15 @@ async def get_all_users() -> List[User]:
 @app.get("/user/{username}", response_model=User)
 async def get_user(username: str) -> User:
     user = next((user for user in users if user.username == username), None)
+    client_user = next((user for user in clients_users
+                        if user.username == username), None)
 
-    if user is None:
+    if user is None and client_user is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail='User not found')
     else:
-        return user
+        return user if user is not None else client_user
 
 
 @app.get("/user/{username}/topic", response_model=List[TopicDistribution])
@@ -114,9 +120,12 @@ async def get_topics_by_username(username: str):
     topics_per_user = topics_dist['per_user']
 
     if username not in topics_per_user.keys():
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail='User not found')
+        if username not in clients_topic_dist.keys():
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail='User not found')
+        else:
+            return clients_topic_dist[username]
     else:
         return topics_per_user[username]
 
@@ -126,9 +135,12 @@ async def get_sentiment_by_username(username: str):
     sentiment_per_user = sentiment_dist['per_user']
 
     if username not in sentiment_per_user.keys():
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail='User not found')
+        if username not in client_sentiment_dist.keys():
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail='User not found')
+        else:
+            return client_sentiment_dist[username]
     else:
         return sentiment_per_user[username]
 
@@ -137,15 +149,18 @@ async def get_sentiment_by_username(username: str):
 async def get_words_by_username(username: str, limit: int = 100):
     words_per_user = words_counts['per_user']
 
-    if username not in words_per_user.keys():
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail='User not found')
-    elif limit < 1:
+    if limit < 1:
         raise HTTPException(
             status_code=status.HTTP_406_NOT_ACCEPTABLE,
             detail='Limit must be positive integer'
         )
+    elif username not in words_per_user.keys():
+        if username not in clients_words_counts.keys():
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail='User not found')
+        else:
+            return clients_words_counts[username][:limit]
     else:
         return words_per_user[username][:limit]
 
@@ -158,12 +173,26 @@ async def get_tweets_by_username(
         sentiment: Optional[str] = None
 ) -> List[Tweet]:
     user = next((user for user in users if user.username == username), None)
+    client_user = next((user for user in clients_users
+                        if user.username == username), None)
 
     if user is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail='User not found'
-        )
+        if client_user is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail='User not found'
+            )
+        else:
+            user_tweets = await get_tweets_by_column(
+                column_name='username',
+                column_value=username,
+                limit=limit,
+                topic=topic,
+                sentiment=sentiment,
+                table='clients_tweets'
+            )
+            return user_tweets.apply(tweets_from_rows, axis=1).tolist() if len(
+                user_tweets) > 0 else []
     else:
         user_tweets = await get_tweets_by_column(
             column_name='username',
@@ -179,8 +208,10 @@ async def get_tweets_by_username(
 @app.get("/user/{username}/photo", response_model=ProfileImage)
 async def get_user_photo(username: str):
     user = next((user for user in users if user.username == username), None)
+    client_user = next((user for user in clients_users
+                        if user.username == username), None)
 
-    if user is None:
+    if user is None and client_user is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail='User not found'
@@ -476,10 +507,10 @@ async def analyze(tweets: pd.DataFrame):
 
     cleaned = cleaning.get()
 
-    # lemmatization = chain(
-    #     signature('lemmatize', args=(cleaned,), options={'queue': 'cleaning'}),
-    #     signature('stopwords', options={'queue': 'cleaning'})
-    # ).delay()
+    lemmatization = chain(
+        signature('lemmatize', args=(cleaned,), options={'queue': 'cleaning'}),
+        signature('stopwords', options={'queue': 'cleaning'})
+    ).delay()
 
     emoji_removal = signature('emoji', args=(cleaned,),
                               options={'queue': 'cleaning'}).delay()
@@ -488,6 +519,9 @@ async def analyze(tweets: pd.DataFrame):
         await asyncio.sleep(1)
 
     emojied = emoji_removal.get()
+
+    sentiment = signature('sentiment', args=(emojied, ),
+                          options={'queue': 'processing'}).delay()
 
     emb_calc = signature('embedding', args=(emojied, ),
                          options={'queue': 'embedding'}).delay()
@@ -506,9 +540,34 @@ async def analyze(tweets: pd.DataFrame):
 
     clustering_res = clustering.get()
     graph_res = graph.get()
-    # lemma_res = lemmatization.get()
 
-    return clustering_res, graph_res, len(cleaned)
+    while not lemmatization.ready():
+        await asyncio.sleep(1)
+
+    lemmas_df = lemmatization.get()
+
+    topics = signature('topics', args=(lemmas_df, ),
+                       options={'queue': 'processing'}).delay()
+
+    words = signature('words', args=(lemmas_df,),
+                      options={'queue': 'processing'}).delay()
+
+    while not words.ready():
+        await asyncio.sleep(1)
+
+    words_dict = words.get()
+
+    while not topics.ready():
+        await asyncio.sleep(1)
+
+    topics_df, topics_distribution = topics.get()
+
+    while not sentiment.ready():
+        await asyncio.sleep(1)
+
+    sentiment_df, sentiment_distribution = sentiment.get()
+
+    return clustering_res, graph_res, len(cleaned), topics_df, topics_distribution, sentiment_df, sentiment_distribution, words_dict
 
 
 @app.websocket("/new")
@@ -518,7 +577,7 @@ async def analyze_new_username(websocket: WebSocket):
     username = await websocket.receive_text()
 
     try:
-        if username in [user.username for user in users]:
+        if username in [user.username for user in users + clients_users]:
             await websocket.send_json(
                 get_response(STATUS_ERROR,
                              "This account is already available"))
@@ -544,7 +603,7 @@ async def analyze_new_username(websocket: WebSocket):
                              f"Analyzing tweets for {username}"))
 
         await asyncio.sleep(1)
-        cluster, graph, tweets_count = await analyze(tweets)
+        cluster, graph, tweets_count, topics, topics_distribution, sentiment, sentiment_distribution, words = await analyze(tweets)
 
         user = User(
             username=username,
@@ -562,8 +621,20 @@ async def analyze_new_username(websocket: WebSocket):
             cluster_kmeans_id=cluster['kmeans_cluster'],
             cluster_pam_id=cluster['pam_cluster']
         )
+        clients_users.append(user)
 
-        await websocket.send_json(user.dict())
+        clients_topic_dist[username] = topics_distribution
+        client_sentiment_dist[username] = sentiment_distribution
+        clients_words_counts[username] = words
+
+        full_df = tweets.merge(topics, on='id', how='right')
+        full_df = full_df.merge(sentiment, on='id', how='right')
+        full_df.to_sql('clients_tweets', db_engine, if_exists='append')
+
+        await websocket.send_json(
+            get_response(STATUS_OK,
+                         f'Finished for {username}')
+        )
     except WrongUsernameException:
         await websocket.send_json(
             get_response(STATUS_ERROR,

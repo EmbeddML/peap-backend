@@ -23,8 +23,9 @@ services:
       - /etc/letsencrypt/live/embedd.ml/cert.pem:/secrets/cert.pem
       - /etc/letsencrypt/live/embedd.ml/privkey.pem:/secrets/key.pem
       - ./certs-traefik.yaml:/etc/traefik/dynamic/certs-traefik.yaml
+
   api:
-    image: piotrgramacki/sma-backend:0.8
+    image: piotrgramacki/sma-backend:0.9
     labels:
       - "traefik.http.routers.api.entrypoints=https"
       - "traefik.http.routers.api.tls=true"
@@ -33,8 +34,42 @@ services:
     env_file:
       - env_files/twitter_credentials.env
       - env_files/celery.env
+    environment:
+      - MAX_WORKERS=1
     volumes:
       - ./data/:/app/data/
+
+  embedding-worker:
+    image: piotrgramacki/sma-celery:embedding
+    command: [ celery, --app=embedding.app, worker, -Q, embedding ]
+    env_file:
+      - env_files/celery.env
+    depends_on:
+      - rabbitmq
+    volumes:
+      - ./models:/app/models/
+
+  processing-worker:
+    image: piotrgramacki/sma-celery:processing
+    command: [ celery, --app=processing.app, worker, -Q, processing ]
+    env_file:
+      - env_files/celery.env
+    depends_on:
+      - rabbitmq
+    volumes:
+      - ./models:/app/models/
+
+  cleaning-worker:
+    image: piotrgramacki/sma-celery:processing
+    command: [ celery, --app=cleaning.app, worker, -Q, cleaning ]
+    env_file:
+      - env_files/celery.env
+    depends_on:
+      - rabbitmq
+      - krnnt
+
+  krnnt:
+    image: djstrong/krnnt:1.0.0
 
   rabbitmq:
     image: rabbitmq:3.8

@@ -641,6 +641,8 @@ async def analyze_new_username(websocket: WebSocket):
                     get_response(STATUS_OK,
                                  f'Finished for {username}')
                 )
+
+                await websocket.close()
     except WrongUsernameException:
         await websocket.send_json(
             get_response(STATUS_ERROR,

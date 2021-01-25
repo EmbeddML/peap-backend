@@ -17,6 +17,8 @@ app.config_from_object(celery_conf)
 
 LOG = get_logger('PROCESSING')
 
+sentiment_model = fasttext.load_model('models/sentiment.bin')
+
 
 @app.task(bind=True, name='clustering')
 def calc_clustering(self, embedding: np.ndarray) -> Dict[str, int]:
@@ -93,8 +95,6 @@ def calc_topics(self, tweets: pd.DataFrame) -> Tuple[pd.DataFrame, List[Dict]]:
 @app.task(bind=True, name='sentiment')
 def calc_sentiment(self, tweets: pd.DataFrame) -> Tuple[pd.DataFrame, List]:
     LOG.info('Sentiment calculations - started')
-
-    sentiment_model = fasttext.load_model('models/sentiment.bin')
 
     tweets.loc[:, 'tweet'] = tweets['tweet'].apply(str.lower)
     tweets_text = tweets['tweet'].tolist()

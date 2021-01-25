@@ -45,7 +45,7 @@ services:
     env_file:
       - env_files/celery.env
     depends_on:
-      - rabbitmq
+      - redis
     volumes:
       - ./models:/app/models/
 
@@ -55,7 +55,7 @@ services:
     env_file:
       - env_files/celery.env
     depends_on:
-      - rabbitmq
+      - redis
     volumes:
       - ./models:/app/models/
 
@@ -65,15 +65,13 @@ services:
     env_file:
       - env_files/celery.env
     depends_on:
-      - rabbitmq
+      - redis
       - krnnt
 
   krnnt:
     image: djstrong/krnnt:1.0.0
 
-  rabbitmq:
-    image: rabbitmq:3.8
+  redis:
+    image: redis:6.0.10
     ports:
-      - 35672:5672
-    volumes:
-      - ./rabbitmq.conf:/etc/rabbitmq/rabbitmq.conf
+      - 35672:6379

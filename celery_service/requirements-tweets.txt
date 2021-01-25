@@ -1,2 +1,2 @@
-celery==5.0.5
+celery[redis]==5.0.5
 git+https://github.com/twintproject/twint.git@master#egg=twint

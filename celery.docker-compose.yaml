@@ -5,6 +5,6 @@ services:
     image: piotrgramacki/sma-celery:tweets
     command: [celery, --app=tweets.app, worker, -Q, tweets]
     environment:
-      - CELERY_BROKER_URL=amqp://guest:guest@embedd.ml:35672
-      - CELERY_RESULT_BACKEND=rpc
+      - CELERY_BROKER_URL=redis://embedd.ml:35672/0
+      - CELERY_RESULT_BACKEND=redis://embedd.ml:35672/0
       - TWEETS_LIMIT=500

@@ -1,0 +1,10 @@
+version: '3.8'
+
+services:
+  embedding-worker:
+    image: piotrgramacki/sma-celery:processing
+    command: [ celery, --app=embedding.app, worker, --pool=solo, -Q, embedding ]
+    environment:
+      - CELERY_BROKER_URL=redis://embedd.ml:35672/0
+      - CELERY_RESULT_BACKEND=redis://embedd.ml:35672/0
+      - TWEETS_LIMIT=500

@@ -56,7 +56,7 @@ def calc_graph_pos(self, embedding: np.ndarray) -> Dict[str, float]:
 
 
 @app.task(bind=True, name='topics')
-def calc_topics(self, lammatized_tweets: pd.DataFrame) -> Tuple[pd.DataFrame, List[Dict]]:
+def calc_topics(self, lemmatized_tweets: pd.DataFrame) -> Tuple[pd.DataFrame, List[Dict]]:
     LOG.info('Topics calculations - started')
 
     with open('models/vectorizer.pkl.gz', 'rb') as f:
@@ -64,15 +64,15 @@ def calc_topics(self, lammatized_tweets: pd.DataFrame) -> Tuple[pd.DataFrame, Li
     with open('models/lda.pkl.gz', 'rb') as f:
         lda: LatentDirichletAllocation = pkl.load(f)
 
-    tweets_text = lammatized_tweets['tweet'].tolist()
+    tweets_text = lemmatized_tweets['tweet'].tolist()
     counts = vectorizer.transform(tweets_text)
     probas = lda.transform(counts)
 
     labels = np.argmax(probas, axis=1)
     prob_values = np.max(probas, axis=1)
 
-    lammatized_tweets.loc[:, 'topic'] = labels
-    lammatized_tweets.loc[:, 'topic_proba'] = prob_values
+    lemmatized_tweets.loc[:, 'topic'] = labels
+    lemmatized_tweets.loc[:, 'topic_proba'] = prob_values
 
     values = np.sum(probas, axis=0)
     distribution = values / np.sum(values)
@@ -88,8 +88,8 @@ def calc_topics(self, lammatized_tweets: pd.DataFrame) -> Tuple[pd.DataFrame, Li
 
     LOG.info('Topics calculations - done')
 
-    lammatized_tweets = lammatized_tweets[['id', 'topic', 'topic_proba']]
-    return lammatized_tweets, topics_distributions
+    lemmatized_tweets = lemmatized_tweets[['id', 'topic', 'topic_proba']]
+    return lemmatized_tweets, topics_distributions
 
 
 @app.task(bind=True, name='sentiment')
@@ -127,13 +127,13 @@ def calc_sentiment(self, emojied_tweets: pd.DataFrame) -> Tuple[pd.DataFrame, Li
 
 
 @app.task(bind=True, name='words')
-def count_words(self, lammatized_tweets: pd.DataFrame) -> List[Dict[str, float]]:
+def count_words(self, lemmatized_tweets: pd.DataFrame) -> List[Dict[str, float]]:
     LOG.info('Words count - started')
 
     with open('models/vectorizer.pkl.gz', 'rb') as f:
         vectorizer: CountVectorizer = pkl.load(f)
 
-    tweets_text = lammatized_tweets['tweet'].tolist()
+    tweets_text = lemmatized_tweets['tweet'].tolist()
     counts = vectorizer.transform(tweets_text)
 
     summed = np.sum(counts, axis=0)

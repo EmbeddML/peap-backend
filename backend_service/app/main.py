@@ -66,7 +66,7 @@ async def get_tweets_by_column(
         table: str = 'tweets'
 ):
     selected = pd.read_sql(
-        f"SELECT * FROM {table} WHERE {column_name} = \"{column_value}\"",
+        f"SELECT DISTINCT * FROM {table} WHERE {column_name} = \"{column_value}\"",
         db_engine
     )
 
@@ -577,7 +577,7 @@ async def analyze_new_username(websocket: WebSocket):
     username = username.lower()
 
     try:
-        if username in [user.username for user in users + clients_users]:
+        if username in [user.username.lower() for user in users + clients_users]:
             await websocket.send_json(
                 get_response(STATUS_ERROR,
                              "This account is already available"))

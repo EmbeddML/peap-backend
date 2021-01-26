@@ -1,0 +1,63 @@
+version: '3.8'
+
+services:
+  api:
+    image: piotrgramacki/sma-backend:0.11
+    ports:
+      - 4000:80
+    env_file:
+      - env_files/twitter_credentials.env
+      - env_files/celery.env
+    environment:
+      - MAX_WORKERS=1
+    volumes:
+      - ./backend_service/app/:/app/
+
+  tweets-worker:
+    image: piotrgramacki/sma-celery:tweets
+    command: [celery, --app=tweets.app, worker, --loglevel=DEBUG, -Q, tweets]
+    env_file:
+      - env_files/celery.env
+    environment:
+      - TWEETS_LIMIT=500
+    depends_on:
+      - redis
+    volumes:
+      - ./celery_service/app:/app/
+
+  embedding-worker:
+    image: piotrgramacki/sma-celery:processing
+    command: [celery, --app=embedding.app, worker, --pool=solo, --loglevel=DEBUG, -Q, embedding]
+    env_file:
+      - env_files/celery.env
+    depends_on:
+      - redis
+    volumes:
+    - ./celery_service/app:/app/
+
+  processing-worker:
+    image: piotrgramacki/sma-celery:processing
+    command: [celery, --app=processing.app, worker, --loglevel=DEBUG, -Q, processing]
+    env_file:
+      - env_files/celery.env
+    depends_on:
+      - redis
+    volumes:
+    - ./celery_service/app:/app/
+
+  cleaning-worker:
+    image: piotrgramacki/sma-celery:processing
+    command: [celery, --app=cleaning.app, worker, --loglevel=DEBUG, -Q, cleaning]
+    env_file:
+      - env_files/celery.env
+    depends_on:
+      - redis
+      - krnnt
+    volumes:
+      - ./celery_service/app:/app/
+
+  krnnt:
+    image: djstrong/krnnt:1.0.0
+
+  redis:
+    image: redis:6.0.10

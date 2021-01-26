@@ -29,16 +29,11 @@ def embed_tweets(tweets_data: pd.DataFrame) -> np.ndarray:
     with torch.no_grad():
         for idx, batch in enumerate(chunks(tweet_texts, 150)):
             LOG.info(f'{idx + 1}, {150}')
-            # LOG.info(batch[0])
-            # LOG.info(len(batch))
             tokenized_text = tokenizer.batch_encode_plus(
                 batch, padding="longest", add_special_tokens=True,
                 return_tensors="pt"
             )
-            # LOG.info(idx)
-            # LOG.info(tokenized_text)
             outputs = model(**tokenized_text)
-            # LOG.info(idx)
             batch_embeddings = outputs[1].cpu().numpy()
             tweet_embeddings.extend(batch_embeddings)
 
@@ -52,7 +47,6 @@ def embed_tweets(tweets_data: pd.DataFrame) -> np.ndarray:
 def calc_embedding(self, tweets: pd.DataFrame) -> np.ndarray:
     LOG.info('Embedding calculation - started')
     res = embed_tweets(tweets)
-    # res = np.random.random(768)
     LOG.info('Embedding calculation - done')
 
     return res

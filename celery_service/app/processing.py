@@ -56,7 +56,7 @@ def calc_graph_pos(self, embedding: np.ndarray) -> Dict[str, float]:
 
 
 @app.task(bind=True, name='topics')
-def calc_topics(self, tweets: pd.DataFrame) -> Tuple[pd.DataFrame, List[Dict]]:
+def calc_topics(self, lammatized_tweets: pd.DataFrame) -> Tuple[pd.DataFrame, List[Dict]]:
     LOG.info('Topics calculations - started')
 
     with open('models/vectorizer.pkl.gz', 'rb') as f:
@@ -64,15 +64,15 @@ def calc_topics(self, tweets: pd.DataFrame) -> Tuple[pd.DataFrame, List[Dict]]:
     with open('models/lda.pkl.gz', 'rb') as f:
         lda: LatentDirichletAllocation = pkl.load(f)
 
-    tweets_text = tweets['tweet'].tolist()
+    tweets_text = lammatized_tweets['tweet'].tolist()
     counts = vectorizer.transform(tweets_text)
     probas = lda.transform(counts)
 
     labels = np.argmax(probas, axis=1)
     prob_values = np.max(probas, axis=1)
 
-    tweets.loc[:, 'topic'] = labels
-    tweets.loc[:, 'topic_proba'] = prob_values
+    lammatized_tweets.loc[:, 'topic'] = labels
+    lammatized_tweets.loc[:, 'topic_proba'] = prob_values
 
     values = np.sum(probas, axis=0)
     distribution = values / np.sum(values)
@@ -88,22 +88,22 @@ def calc_topics(self, tweets: pd.DataFrame) -> Tuple[pd.DataFrame, List[Dict]]:
 
     LOG.info('Topics calculations - done')
 
-    tweets = tweets[['id', 'topic', 'topic_proba']]
-    return tweets, topics_distributions
+    lammatized_tweets = lammatized_tweets[['id', 'topic', 'topic_proba']]
+    return lammatized_tweets, topics_distributions
 
 
 @app.task(bind=True, name='sentiment')
-def calc_sentiment(self, tweets: pd.DataFrame) -> Tuple[pd.DataFrame, List]:
+def calc_sentiment(self, emojied_tweets: pd.DataFrame) -> Tuple[pd.DataFrame, List]:
     LOG.info('Sentiment calculations - started')
 
-    tweets.loc[:, 'tweet'] = tweets['tweet'].apply(str.lower)
-    tweets_text = tweets['tweet'].tolist()
+    emojied_tweets.loc[:, 'tweet'] = emojied_tweets['tweet'].apply(str.lower)
+    tweets_text = emojied_tweets['tweet'].tolist()
 
     predictions = sentiment_model.predict(tweets_text)[0]
     predictions = [label for sublist in predictions for label in sublist]
 
-    tweets['sentiment'] = predictions
-    tweets.replace(to_replace={
+    emojied_tweets['sentiment'] = predictions
+    emojied_tweets.replace(to_replace={
         '__label__positive': 'positive',
         '__label__negative': 'negative',
         '__label__ambiguous': 'ambiguous',
@@ -111,7 +111,7 @@ def calc_sentiment(self, tweets: pd.DataFrame) -> Tuple[pd.DataFrame, List]:
     }, inplace=True)
 
     sent_values = ['negative', 'neutral', 'positive', 'ambiguous']
-    sent_counts = tweets.sentiment.value_counts()
+    sent_counts = emojied_tweets.sentiment.value_counts()
     tweets_count = sent_counts.sum()
     sentiment_dist = []
     for sent in sent_values:
@@ -122,18 +122,18 @@ def calc_sentiment(self, tweets: pd.DataFrame) -> Tuple[pd.DataFrame, List]:
 
     LOG.info('Sentiment calculations - done')
 
-    tweets = tweets[['id', 'sentiment']]
-    return tweets, sentiment_dist
+    emojied_tweets = emojied_tweets[['id', 'sentiment']]
+    return emojied_tweets, sentiment_dist
 
 
 @app.task(bind=True, name='words')
-def count_words(self, tweets: pd.DataFrame) -> List[Dict[str, float]]:
+def count_words(self, lammatized_tweets: pd.DataFrame) -> List[Dict[str, float]]:
     LOG.info('Words count - started')
 
     with open('models/vectorizer.pkl.gz', 'rb') as f:
         vectorizer: CountVectorizer = pkl.load(f)
 
-    tweets_text = tweets['tweet'].tolist()
+    tweets_text = lammatized_tweets['tweet'].tolist()
     counts = vectorizer.transform(tweets_text)
 
     summed = np.sum(counts, axis=0)

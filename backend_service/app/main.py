@@ -469,15 +469,6 @@ async def get_tweets_by_topic(topic_id: int, limit: int = 5):
             topic_tweets) > 0 else []
 
 
-@app.websocket("/test_ws")
-async def test_websocket_endpoint(websocket: WebSocket):
-    await websocket.accept()
-    await websocket.send_text("Ala ma kota")
-    await asyncio.sleep(3)
-    print("x")
-    await websocket.send_text("Ale jej zdechl")
-
-
 def get_response(curr_status: str, text: str) -> Dict[str, str]:
     return {
         "status": curr_status,

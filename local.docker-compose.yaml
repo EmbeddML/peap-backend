@@ -2,7 +2,7 @@ version: '3.8'
 
 services:
   api:
-    image: piotrgramacki/sma-backend:0.12
+    image: piotrgramacki/sma-backend:0.14
     ports:
       - 4000:80
     env_file:

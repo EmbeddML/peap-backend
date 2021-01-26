@@ -46,7 +46,7 @@ def lemmatization(self, df: pd.DataFrame) -> pd.DataFrame:
     LOG.info('Lemma - started')
     pos_to_keep = {"subst", "depr", "ger"}
     df.loc[:, "tweet"] = df["tweet"].apply(
-        lambda x: lemmatize(x, pos_to_keep, True).lower()
+        lambda x: lemmatize(x, pos_to_keep, False).lower()
     )
     LOG.info('Lemma - done')
     return df

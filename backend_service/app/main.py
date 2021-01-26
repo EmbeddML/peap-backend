@@ -105,7 +105,7 @@ async def get_all_users() -> List[User]:
 async def get_user(username: str) -> User:
     user = next((user for user in users if user.username == username), None)
     client_user = next((user for user in clients_users
-                        if user.username == username), None)
+                        if user.username == username.lower()), None)
 
     if user is None and client_user is None:
         raise HTTPException(
@@ -117,15 +117,16 @@ async def get_user(username: str) -> User:
 
 @app.get("/user/{username}/topic", response_model=List[TopicDistribution])
 async def get_topics_by_username(username: str):
+
     topics_per_user = topics_dist['per_user']
 
     if username not in topics_per_user.keys():
-        if username not in clients_topic_dist.keys():
+        if username.lower() not in clients_topic_dist.keys():
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail='User not found')
         else:
-            return clients_topic_dist[username]
+            return clients_topic_dist[username.lower()]
     else:
         return topics_per_user[username]
 
@@ -135,12 +136,12 @@ async def get_sentiment_by_username(username: str):
     sentiment_per_user = sentiment_dist['per_user']
 
     if username not in sentiment_per_user.keys():
-        if username not in client_sentiment_dist.keys():
+        if username.lower() not in client_sentiment_dist.keys():
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail='User not found')
         else:
-            return client_sentiment_dist[username]
+            return client_sentiment_dist[username.lower()]
     else:
         return sentiment_per_user[username]
 
@@ -155,12 +156,12 @@ async def get_words_by_username(username: str, limit: int = 100):
             detail='Limit must be positive integer'
         )
     elif username not in words_per_user.keys():
-        if username not in clients_words_counts.keys():
+        if username.lower() not in clients_words_counts.keys():
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail='User not found')
         else:
-            return clients_words_counts[username][:limit]
+            return clients_words_counts[username.lower()][:limit]
     else:
         return words_per_user[username][:limit]
 
@@ -174,7 +175,7 @@ async def get_tweets_by_username(
 ) -> List[Tweet]:
     user = next((user for user in users if user.username == username), None)
     client_user = next((user for user in clients_users
-                        if user.username == username), None)
+                        if user.username == username.lower()), None)
 
     if user is None:
         if client_user is None:
@@ -185,7 +186,7 @@ async def get_tweets_by_username(
         else:
             user_tweets = await get_tweets_by_column(
                 column_name='username',
-                column_value=username,
+                column_value=username.lower(),
                 limit=limit,
                 topic=topic,
                 sentiment=sentiment,
@@ -209,7 +210,7 @@ async def get_tweets_by_username(
 async def get_user_photo(username: str):
     user = next((user for user in users if user.username == username), None)
     client_user = next((user for user in clients_users
-                        if user.username == username), None)
+                        if user.username == username.lower()), None)
 
     if user is None and client_user is None:
         raise HTTPException(
@@ -573,6 +574,8 @@ async def analyze_new_username(websocket: WebSocket):
 
     username = await websocket.receive_text()
 
+    username = username.lower()
+
     try:
         if username in [user.username for user in users + clients_users]:
             await websocket.send_json(
@@ -627,6 +630,7 @@ async def analyze_new_username(websocket: WebSocket):
 
                 full_df = tweets.merge(topics, on='id', how='right')
                 full_df = full_df.merge(sentiment, on='id', how='right')
+                full_df.loc[:, 'username'] = full_df['username'].apply(str.lower)
                 full_df.to_sql('clients_tweets', db_engine, if_exists='append')
 
                 await websocket.send_json(

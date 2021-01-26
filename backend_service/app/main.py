@@ -512,6 +512,9 @@ async def analyze(tweets: pd.DataFrame):
     emoji_removal = signature('emoji', args=(cleaned,),
                               options={'queue': 'cleaning'}).delay()
 
+    emb_calc = signature('embedding', args=(cleaned, ),
+                         options={'queue': 'embedding'}).delay()
+
     while not emoji_removal.ready():
         await asyncio.sleep(1)
 
@@ -519,9 +522,6 @@ async def analyze(tweets: pd.DataFrame):
 
     sentiment = signature('sentiment', args=(emojied, ),
                           options={'queue': 'processing'}).delay()
-
-    emb_calc = signature('embedding', args=(emojied, ),
-                         options={'queue': 'embedding'}).delay()
 
     while not lemmatization.ready():
         await asyncio.sleep(1)

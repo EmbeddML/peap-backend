@@ -15,9 +15,9 @@ class User(BaseModel):
     x_graph3d: float
     y_graph3d: float
     z_graph3d: float
-    cluster_dbscan_id: int
+    cluster_mean_shift_id: int
     cluster_kmeans_id: int
-    cluster_pam_id: int
+    cluster_gmm_id: int
 
 
 class Party(BaseModel):

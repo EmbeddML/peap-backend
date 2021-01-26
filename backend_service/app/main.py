@@ -553,9 +553,10 @@ async def analyze(tweets: pd.DataFrame):
 
     emb_res = emb_calc.get()
 
+    graph = signature('graph', options={'queue': 'processing'}).delay(emb_res)
+
     clustering = signature('clustering', args=(emb_res, ),
                            options={'queue': 'processing'}).delay()
-    graph = signature('graph', options={'queue': 'processing'}).delay(emb_res)
 
     while not clustering.ready() and not graph.ready():
         await asyncio.sleep(1)
@@ -614,9 +615,9 @@ async def analyze_new_username(websocket: WebSocket):
                     x_graph3d=graph['3D_x'],
                     y_graph3d=graph['3D_y'],
                     z_graph3d=graph['3D_z'],
-                    cluster_dbscan_id=cluster['dbscan_cluster'],
+                    cluster_mean_shift_id=cluster['mean_shift_cluster'],
                     cluster_kmeans_id=cluster['kmeans_cluster'],
-                    cluster_pam_id=cluster['pam_cluster']
+                    cluster_gmm_id=cluster['gmm_cluster']
                 )
                 clients_users.append(user)
 

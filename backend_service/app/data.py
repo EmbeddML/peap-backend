@@ -39,7 +39,7 @@ def load_parties() -> List[Party]:
 
 def load_users() -> List[User]:
     users = pd.read_csv(join(DATA_DIRECTORY, "users.csv"))
-    graph = pd.read_csv(join(DATA_DIRECTORY, "graph_tsne.csv"))
+    graph = pd.read_csv(join(DATA_DIRECTORY, "graph_umap.csv"))
     clusters = pd.read_csv(join(DATA_DIRECTORY, "clusters.csv"))
 
     users['username'] = users['username'].str.lower()
@@ -60,9 +60,9 @@ def load_users() -> List[User]:
             x_graph3d=row['3D_x'],
             y_graph3d=row['3D_y'],
             z_graph3d=row['3D_z'],
-            cluster_dbscan_id=randint(0, 6),
+            cluster_mean_shift_id=row['mean_shift_cluster'],
             cluster_kmeans_id=row['kmeans_cluster'],
-            cluster_pam_id=randint(0, 6)
+            cluster_gmm_id=row['gmm_cluster']
         )
 
     users = df.apply(user_from_row, axis=1).tolist()

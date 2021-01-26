@@ -1,5 +1,4 @@
-from random import random, randint
-from typing import Dict, List, Union, Tuple
+from typing import Dict, List, Tuple
 import pickle as pkl
 
 from celery import Celery
@@ -7,6 +6,7 @@ import numpy as np
 import pandas as pd
 from sklearn.feature_extraction.text import CountVectorizer
 from sklearn.decomposition import LatentDirichletAllocation
+from umap import UMAP
 import fasttext
 
 import celery_conf
@@ -24,34 +24,45 @@ sentiment_model = fasttext.load_model('models/sentiment.bin')
 def calc_clustering(self, embedding: np.ndarray) -> Dict[str, int]:
     LOG.info('Clusters calculations - started')
 
-    with open('models/kmeans.pkl.gz', 'rb') as f:
-        kmeans = pkl.load(f)
+    with open('models/cluster_models.pkl.gz', 'rb') as f:
+        models = pkl.load(f)
 
-    kmeans_cluster = kmeans.predict(embedding.reshape(1, -1))
-    dbscan_cluster = randint(0, 6)
-    pam_cluster = randint(0, 6)
+    reshaped = embedding.reshape(1, -1)
+
+    kmeans_cluster = models['k_means'].predict(reshaped)
+    gmm_cluster = models['gmm'].predict(reshaped)
+    mean_shift_cluster = models['mean_shift'].predict(reshaped)
 
     LOG.info('Clusters calculations - done')
 
     return {
         'kmeans_cluster': kmeans_cluster,
-        'dbscan_cluster': dbscan_cluster,
-        'pam_cluster': pam_cluster
+        'mean_shift_cluster': mean_shift_cluster,
+        'gmm_cluster': gmm_cluster
     }
 
 
 @app.task(bind=True, name='graph')
 def calc_graph_pos(self, embedding: np.ndarray) -> Dict[str, float]:
     LOG.info('Graph calculations - started')
-    #  TODO - when UMAP is ready use it here
+
+    with open('models/umap_2d.pkl.gz', 'rb') as f:
+        umap_2d: UMAP = pkl.load(f)
+    with open('models/umap_3d.pkl.gz', 'rb') as f:
+        umap_3d: UMAP = pkl.load(f)
+
+    reshaped = embedding.reshape(1, -1)
+
+    points_2d = umap_2d.transform(reshaped).squeeze()
+    points_3d = umap_3d.transform(reshaped).squeeze()
     LOG.info('Graph calculations - done')
 
     return {
-        '2D_x': random(),
-        '2D_y': random(),
-        '3D_x': random(),
-        '3D_y': random(),
-        '3D_z': random()
+        '2D_x': points_2d[0],
+        '2D_y': points_2d[1],
+        '3D_x': points_3d[0],
+        '3D_y': points_3d[1],
+        '3D_z': points_3d[2]
     }
 
 

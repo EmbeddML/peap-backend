@@ -7,4 +7,4 @@ services:
     environment:
       - CELERY_BROKER_URL=redis://embedd.ml:35672/0
       - CELERY_RESULT_BACKEND=redis://embedd.ml:35672/0
-      - TWEETS_LIMIT=500
+      - TWEETS_LIMIT=1000

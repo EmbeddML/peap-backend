@@ -25,7 +25,7 @@ services:
       - ./certs-traefik.yaml:/etc/traefik/dynamic/certs-traefik.yaml
 
   api:
-    image: piotrgramacki/sma-backend:0.14
+    image: piotrgramacki/sma-backend:0.16
     labels:
       - "traefik.http.routers.api.entrypoints=https"
       - "traefik.http.routers.api.tls=true"

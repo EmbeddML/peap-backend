@@ -89,7 +89,7 @@ def tweets_from_rows(row: pd.Series) -> Tweet:
         tweet_id=row['id'],
         twitter_link=row['link'],
         username=row['username'],
-        tweet_text=row['tweet'],
+        tweet_text="x",
         topic=row['topic'],
         topic_proba=row['topic_proba'],
         sentiment=row['sentiment']

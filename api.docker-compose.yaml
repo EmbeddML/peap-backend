@@ -35,3 +35,5 @@ services:
       - env_files/twitter_credentials.env
     environment:
       - MAX_WORKERS=2
+    volumes:
+      - ./data/:/app/data/

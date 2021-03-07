@@ -19,8 +19,8 @@ from twitter import get_twitter_api_instance, get_profile_photo
 
 app = FastAPI()
 
-celery_app = Celery()
-celery_app.config_from_object(celery_conf)
+# celery_app = Celery()
+# celery_app.config_from_object(celery_conf)
 
 app.add_middleware(CORSMiddleware, allow_origins=["*"])
 
@@ -470,191 +470,191 @@ async def get_tweets_by_topic(topic_id: int, limit: int = 5):
             topic_tweets) > 0 else []
 
 
-def get_response(curr_status: str, text: str) -> Dict[str, str]:
-    return {
-        "status": curr_status,
-        "text": text
-    }
-
-
-async def download_tweets(username: str) -> pd.DataFrame:
-    tweets_getting = signature('get_tweets', args=(username,),
-                               options={'queue': 'tweets'}).delay()
-
-    while not tweets_getting.ready():
-        await asyncio.sleep(2)
-
-    if tweets_getting.failed():
-        raise WrongUsernameException()
-    else:
-        return tweets_getting.get()
-
-
-async def analyze(tweets: pd.DataFrame):
-    cleaning = signature('clean', args=(tweets,),
-                         options={'queue': 'cleaning'}).delay()
-
-    while not cleaning.ready():
-        await asyncio.sleep(1)
-
-    cleaned = cleaning.get()
-
-    if len(cleaned) == 0:
-        raise NoTweetsLeftException()
-
-    await asyncio.sleep(1)
-
-    lemmatization = chain(
-        signature('lemmatize', args=(cleaned,), options={'queue': 'cleaning'}),
-        signature('stopwords', options={'queue': 'cleaning'})
-    ).delay()
-
-    emoji_removal = signature('emoji', args=(cleaned,),
-                              options={'queue': 'cleaning'}).delay()
-
-    emb_calc = signature('embedding', args=(cleaned, ),
-                         options={'queue': 'embedding'}).delay()
-
-    while not emoji_removal.ready():
-        await asyncio.sleep(1)
-
-    emojied = emoji_removal.get()
-
-    sentiment = signature('sentiment', args=(emojied, ),
-                          options={'queue': 'processing'}).delay()
-
-    while not lemmatization.ready():
-        await asyncio.sleep(1)
-
-    lemmas_df = lemmatization.get()
-
-    topics = signature('topics', args=(lemmas_df, ),
-                       options={'queue': 'processing'}).delay()
-
-    words = signature('words', args=(lemmas_df,),
-                      options={'queue': 'processing'}).delay()
-
-    while not words.ready():
-        await asyncio.sleep(1)
-
-    words_dict = words.get()
-
-    while not topics.ready():
-        await asyncio.sleep(1)
-
-    topics_df, topics_distribution = topics.get()
-
-    while not sentiment.ready():
-        await asyncio.sleep(1)
-
-    sentiment_df, sentiment_distribution = sentiment.get()
-
-    while not emb_calc.ready():
-        await asyncio.sleep(1)
-
-    emb_res = emb_calc.get()
-
-    graph = signature('graph', options={'queue': 'processing'}).delay(emb_res)
-
-    clustering = signature('clustering', args=(emb_res, ),
-                           options={'queue': 'processing'}).delay()
-
-    while not clustering.ready() and not graph.ready():
-        await asyncio.sleep(1)
-
-    clustering_res = clustering.get()
-    graph_res = graph.get()
-
-    return clustering_res, graph_res, len(cleaned), topics_df, topics_distribution, sentiment_df, sentiment_distribution, words_dict
-
-
-@app.websocket("/new")
-async def analyze_new_username(websocket: WebSocket):
-    await websocket.accept()
-
-    username = await websocket.receive_text()
-
-    username = username.lower()
-
-    try:
-        if username in [user.username.lower() for user in users + clients_users]:
-            await websocket.send_json(
-                get_response(STATUS_ERROR,
-                             "This account is already available"))
-            await websocket.close()
-        else:
-            await websocket.send_json(
-                get_response(STATUS_OK,
-                             f"Collecting tweets from {username} account"))
-
-            await asyncio.sleep(1)
-
-            tweets = await download_tweets(username)
-
-            if len(tweets) == 0:
-                await websocket.send_json(
-                    get_response(STATUS_ERROR,
-                                 f"No tweets found for {username} account")
-                )
-                await websocket.close()
-            else:
-                await websocket.send_json(
-                    get_response(STATUS_OK,
-                                 f"Analyzing tweets for {username}"))
-
-                await asyncio.sleep(1)
-
-                cluster, graph, tweets_count, topics, topics_distribution, sentiment, sentiment_distribution, words = await analyze(tweets)
-
-                user = User(
-                    username=username,
-                    party=None,
-                    coalition=None,
-                    role=None,
-                    name=None,
-                    tweets_count=tweets_count,
-                    x_graph2d=graph['2D_x'],
-                    y_graph2d=graph['2D_y'],
-                    x_graph3d=graph['3D_x'],
-                    y_graph3d=graph['3D_y'],
-                    z_graph3d=graph['3D_z'],
-                    cluster_mean_shift_id=cluster['mean_shift_cluster'],
-                    cluster_kmeans_id=cluster['kmeans_cluster'],
-                    cluster_gmm_id=cluster['gmm_cluster']
-                )
-                clients_users.append(user)
-
-                clients_topic_dist[username] = topics_distribution
-                client_sentiment_dist[username] = sentiment_distribution
-                clients_words_counts[username] = words
-
-                full_df = tweets.merge(topics, on='id', how='right')
-                full_df = full_df.merge(sentiment, on='id', how='right')
-                full_df.loc[:, 'username'] = full_df['username'].apply(str.lower)
-                full_df.to_sql('clients_tweets', db_engine, if_exists='append')
-
-                await websocket.send_json(
-                    get_response(STATUS_OK,
-                                 f'Finished for {username}')
-                )
-
-                await websocket.close()
-    except WrongUsernameException:
-        await websocket.send_json(
-            get_response(STATUS_ERROR,
-                         f"Can't find {username} account")
-        )
-        await websocket.close()
-    except NoTweetsLeftException:
-        await websocket.send_json(
-            get_response(STATUS_ERROR,
-                         f"No tweets found for {username} account")
-        )
-        await websocket.close()
-    # except Exception as e:
-    #     # FIXME - this one needs fixing,
-    #     #  but I don't know how to cache exception while in await state :(
-    #     #  Should just catch WebSocketDisconnect
-    #     # TODO - try to find a way to stop running task on disconnection
-    #     print(e)
-    #     print("disconnected")
+# def get_response(curr_status: str, text: str) -> Dict[str, str]:
+#     return {
+#         "status": curr_status,
+#         "text": text
+#     }
+#
+#
+# async def download_tweets(username: str) -> pd.DataFrame:
+#     tweets_getting = signature('get_tweets', args=(username,),
+#                                options={'queue': 'tweets'}).delay()
+#
+#     while not tweets_getting.ready():
+#         await asyncio.sleep(2)
+#
+#     if tweets_getting.failed():
+#         raise WrongUsernameException()
+#     else:
+#         return tweets_getting.get()
+#
+#
+# async def analyze(tweets: pd.DataFrame):
+#     cleaning = signature('clean', args=(tweets,),
+#                          options={'queue': 'cleaning'}).delay()
+#
+#     while not cleaning.ready():
+#         await asyncio.sleep(1)
+#
+#     cleaned = cleaning.get()
+#
+#     if len(cleaned) == 0:
+#         raise NoTweetsLeftException()
+#
+#     await asyncio.sleep(1)
+#
+#     lemmatization = chain(
+#         signature('lemmatize', args=(cleaned,), options={'queue': 'cleaning'}),
+#         signature('stopwords', options={'queue': 'cleaning'})
+#     ).delay()
+#
+#     emoji_removal = signature('emoji', args=(cleaned,),
+#                               options={'queue': 'cleaning'}).delay()
+#
+#     emb_calc = signature('embedding', args=(cleaned, ),
+#                          options={'queue': 'embedding'}).delay()
+#
+#     while not emoji_removal.ready():
+#         await asyncio.sleep(1)
+#
+#     emojied = emoji_removal.get()
+#
+#     sentiment = signature('sentiment', args=(emojied, ),
+#                           options={'queue': 'processing'}).delay()
+#
+#     while not lemmatization.ready():
+#         await asyncio.sleep(1)
+#
+#     lemmas_df = lemmatization.get()
+#
+#     topics = signature('topics', args=(lemmas_df, ),
+#                        options={'queue': 'processing'}).delay()
+#
+#     words = signature('words', args=(lemmas_df,),
+#                       options={'queue': 'processing'}).delay()
+#
+#     while not words.ready():
+#         await asyncio.sleep(1)
+#
+#     words_dict = words.get()
+#
+#     while not topics.ready():
+#         await asyncio.sleep(1)
+#
+#     topics_df, topics_distribution = topics.get()
+#
+#     while not sentiment.ready():
+#         await asyncio.sleep(1)
+#
+#     sentiment_df, sentiment_distribution = sentiment.get()
+#
+#     while not emb_calc.ready():
+#         await asyncio.sleep(1)
+#
+#     emb_res = emb_calc.get()
+#
+#     graph = signature('graph', options={'queue': 'processing'}).delay(emb_res)
+#
+#     clustering = signature('clustering', args=(emb_res, ),
+#                            options={'queue': 'processing'}).delay()
+#
+#     while not clustering.ready() and not graph.ready():
+#         await asyncio.sleep(1)
+#
+#     clustering_res = clustering.get()
+#     graph_res = graph.get()
+#
+#     return clustering_res, graph_res, len(cleaned), topics_df, topics_distribution, sentiment_df, sentiment_distribution, words_dict
+#
+#
+# @app.websocket("/new")
+# async def analyze_new_username(websocket: WebSocket):
+#     await websocket.accept()
+#
+#     username = await websocket.receive_text()
+#
+#     username = username.lower()
+#
+#     try:
+#         if username in [user.username.lower() for user in users + clients_users]:
+#             await websocket.send_json(
+#                 get_response(STATUS_ERROR,
+#                              "This account is already available"))
+#             await websocket.close()
+#         else:
+#             await websocket.send_json(
+#                 get_response(STATUS_OK,
+#                              f"Collecting tweets from {username} account"))
+#
+#             await asyncio.sleep(1)
+#
+#             tweets = await download_tweets(username)
+#
+#             if len(tweets) == 0:
+#                 await websocket.send_json(
+#                     get_response(STATUS_ERROR,
+#                                  f"No tweets found for {username} account")
+#                 )
+#                 await websocket.close()
+#             else:
+#                 await websocket.send_json(
+#                     get_response(STATUS_OK,
+#                                  f"Analyzing tweets for {username}"))
+#
+#                 await asyncio.sleep(1)
+#
+#                 cluster, graph, tweets_count, topics, topics_distribution, sentiment, sentiment_distribution, words = await analyze(tweets)
+#
+#                 user = User(
+#                     username=username,
+#                     party=None,
+#                     coalition=None,
+#                     role=None,
+#                     name=None,
+#                     tweets_count=tweets_count,
+#                     x_graph2d=graph['2D_x'],
+#                     y_graph2d=graph['2D_y'],
+#                     x_graph3d=graph['3D_x'],
+#                     y_graph3d=graph['3D_y'],
+#                     z_graph3d=graph['3D_z'],
+#                     cluster_mean_shift_id=cluster['mean_shift_cluster'],
+#                     cluster_kmeans_id=cluster['kmeans_cluster'],
+#                     cluster_gmm_id=cluster['gmm_cluster']
+#                 )
+#                 clients_users.append(user)
+#
+#                 clients_topic_dist[username] = topics_distribution
+#                 client_sentiment_dist[username] = sentiment_distribution
+#                 clients_words_counts[username] = words
+#
+#                 full_df = tweets.merge(topics, on='id', how='right')
+#                 full_df = full_df.merge(sentiment, on='id', how='right')
+#                 full_df.loc[:, 'username'] = full_df['username'].apply(str.lower)
+#                 full_df.to_sql('clients_tweets', db_engine, if_exists='append')
+#
+#                 await websocket.send_json(
+#                     get_response(STATUS_OK,
+#                                  f'Finished for {username}')
+#                 )
+#
+#                 await websocket.close()
+#     except WrongUsernameException:
+#         await websocket.send_json(
+#             get_response(STATUS_ERROR,
+#                          f"Can't find {username} account")
+#         )
+#         await websocket.close()
+#     except NoTweetsLeftException:
+#         await websocket.send_json(
+#             get_response(STATUS_ERROR,
+#                          f"No tweets found for {username} account")
+#         )
+#         await websocket.close()
+#     # except Exception as e:
+#     #     # FIXME - this one needs fixing,
+#     #     #  but I don't know how to cache exception while in await state :(
+#     #     #  Should just catch WebSocketDisconnect
+#     #     # TODO - try to find a way to stop running task on disconnection
+#     #     print(e)
+#     #     print("disconnected")

@@ -1,0 +1,12 @@
+version: '3.8'
+
+services:
+
+  api:
+    image: piotrgramacki/sma-api:0.1
+    ports:
+      - 80:80
+    env_file:
+      - env_files/twitter_credentials.env
+    environment:
+      - MAX_WORKERS=1

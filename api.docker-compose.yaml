@@ -1,12 +1,37 @@
 version: '3.8'
 
 services:
+  reverse-proxy:
+    image: traefik:v2.3
+    command:
+      - --providers.docker
+      - --providers.file.directory=/etc/traefik/dynamic
+      - --entryPoints.http.address=:80
+      - --entryPoints.https.address=:443
+    labels:
+      #Redirect HTTP -> HTTPS
+      - "traefik.enable=true"
+      - "traefik.http.routers.https-redirect.entrypoints=http"
+      - "traefik.http.routers.https-redirect.rule=HostRegexp(`{any:.*}`)"
+      - "traefik.http.routers.https-redirect.middlewares=https-redirect"
+      - "traefik.http.middlewares.https-redirect.redirectscheme.scheme=https"
+    ports:
+      - 80:80
+      - 443:443
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - /etc/letsencrypt/live/embedd.ml/cert.pem:/secrets/cert.pem
+      - /etc/letsencrypt/live/embedd.ml/privkey.pem:/secrets/key.pem
+      - ./certs-traefik.yaml:/etc/traefik/dynamic/certs-traefik.yaml
 
   api:
     image: piotrgramacki/sma-api:0.1
-    ports:
-      - 80:80
+    labels:
+      - "traefik.http.routers.api.entrypoints=https"
+      - "traefik.http.routers.api.tls=true"
+      - "traefik.http.routers.api.rule=Host(`api-politicians.embedd.ml`)"
+      - "traefik.http.services.api-service.loadbalancer.server.port=80"
     env_file:
       - env_files/twitter_credentials.env
     environment:
-      - MAX_WORKERS=1
+      - MAX_WORKERS=2

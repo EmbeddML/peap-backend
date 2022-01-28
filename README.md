@@ -9,14 +9,14 @@
   </p>
 </div>
 
-[![Product Name Screen Shot][product-screenshot_1]](https://politicians.embedd.ml/)
+[![Product Name Screen Shot][product-screenshot_1]](https://politicians.embedd.gq/)
 
 
 <!-- ABOUT THE PROJECT -->
 ## About The Project
 
 This is the source code for the backend of Politicians Exploratory Analysis Platform. 
-A demo app which covers Polish politicians is available [here](https://politicians.embedd.ml/).
+A demo app which covers Polish politicians is available [here](https://politicians.embedd.gq/).
 Frontend is available [here](https://github.com/PEAP2021/peap-frontend).
 
 <p align="right">(<a href="#top">back to top</a>)</p>
